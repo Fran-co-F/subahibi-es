@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "subahibi-es"
+version = "0.1.0"
+description = "Herramientas de traducción para Subarashiki Hibi 15th Anniversary (motor Ethornell/BGI)"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "GPL-3.0-or-later" }
+dependencies = ["Pillow>=10"]
+
+[project.optional-dependencies]
+texto = ["openpyxl>=3.1"]
+dev = ["pytest"]
+
+[project.scripts]
+subahibi-es = "subahibi_es.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

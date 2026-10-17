@@ -1,0 +1,27 @@
+__pycache__/
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+# nunca versionar material del juego ni de la traducción
+trabajo/
+salida/
+*.arc
+*.exe
+*.xlsx
+*.sud
+
+env/
+.venv/
+venv/
+subahibi-es.json
+
+# material de terceros / binarios: nunca al repositorio
+parche de sakurano/
+*.dll
+*.ttf
+*.zip
+*.rar
+*.7z
+*.bak
+node_modules/
