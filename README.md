@@ -14,7 +14,7 @@ Se trabaja **dentro de la carpeta donde está instalado el juego**. El programa 
 al lado y guarda una copia del `BGI.exe` original.
 
 ```
-init  →  exportar  →  (traducir)  →  build  →  instalar          …y al final, si querés:  desinstalar  /  reset
+init  →  exportar  →  (traducir)  →  (wrap)  →  build  →  instalar          …y al final, si querés:  desinstalar  /  reset
 ```
 
 ## 0. Qué necesitás
@@ -87,12 +87,6 @@ Abrí las hojas de `texto/` con LibreOffice, Excel o Google Sheets. Cada fila es
 - Un salto de línea dentro de una celda es un salto de línea del juego.
 - **`build` aplica por defecto las filas `traducido` y `del parche`.** Las `revisar` se dejan en japonés hasta que las confirmes.
 
-Opcional, **saltos de línea automáticos** para que ninguna línea pase de un ancho (corta en límites de palabra):
-```
-subahibi-es text wrap --max-caracteres 44 --max-lineas 3
-```
-(Reescribe las hojas dejando una copia `.bak`. Los saltos que ya había se respetan; `--reflow` los rehace.)
-
 ### Las imágenes
 Abrí `subahibi-es-trabajo/imagenes/indice/index.html` en el navegador (doble clic). Es una galería con las imágenes originales y su estado (traducida, pendiente, a decidir…):
 - Cada tarjeta tiene un **selector de estado** y una nota.
@@ -100,7 +94,26 @@ Abrí `subahibi-es-trabajo/imagenes/indice/index.html` en el navegador (doble cl
 - **Guardar imágenes…** las escribe en una carpeta (elegí `imagenes/traducidas/`; en Chrome/Edge) o descarga un `.zip` (descomprimilo ahí).
 - **Guardar ui_status.tsv** descarga tus decisiones: guardalo como `imagenes/estado.tsv` (reemplazando el existente) y volvé a ejecutar `exportar` para refrescar la galería.
 
-## 5. Armar el parche — `build`
+## 5. Ajustar los saltos de línea — `text wrap` (opcional)
+
+**Cuándo:** después de traducir y **antes de `build`** (`build` lee las hojas tal como estén). El motor corta las líneas solo cuando una letra no entra en la ventana, a mitad de palabra;
+`text wrap` inserta saltos en los espacios para que ninguna línea pase de un ancho:
+
+```
+subahibi-es text wrap --max-caracteres 44 --max-lineas 3
+subahibi-es build
+```
+
+- **Cerrá las hojas** en Excel/LibreOffice antes de correrlo: las reescribe (y si las tenés abiertas, lo que guardes después pisa el resultado).
+- **Antes de la primera corrida** deja una copia `data01101.xlsx.bak` al lado de cada hoja. Esa copia se hace una sola vez, así que siempre es la versión de **antes del primer wrap**.
+  Para volver atrás, copiala encima de la hoja.
+- **Repetirlo es seguro** con el mismo ancho: los saltos que ya hay se respetan y solo se cortan las líneas nuevas o demasiado largas. Sirve para volver a pasarlo después de traducir más filas.
+- **Para cambiar el ancho, usá `--reflow`:** `subahibi-es text wrap --max-caracteres 38 --reflow`. Sin `--reflow` se respetan los saltos de la corrida anterior y las líneas quedan desparejas
+  (por ejemplo una palabra suelta); con `--reflow` se descartan **todos** los saltos manuales —también los que puso quien traducía a propósito, como versos— y se corta de nuevo desde cero.
+- Solo toca los mensajes con español y estado `traducido`, `del parche` o `revisar` (`--estados` para cambiarlo). Con `--max-lineas M` no cambia nada extra: solo anota en `nota` los textos que pasen de M líneas.
+- ¿No sabés el ancho? Medilo en el juego: tomá una línea que llene la ventana y contá los caracteres, o usá `--ancho PX --fuente ARCHIVO.ttf --tamano PX` para medir en píxeles con la fuente del juego.
+
+## 6. Armar el parche — `build`
 
 ```
 subahibi-es build
@@ -109,7 +122,7 @@ Crea en `subahibi-es-trabajo/salida/` **exactamente lo que hay que copiar al jue
 archivos sueltos del parche viejo. La carpeta `salida/` se rehace entera cada vez. Si aparece «N filas no se aplicaron por su estado», son las `revisar`/`sin traducir`;
 para probar con las `revisar` incluidas: `subahibi-es build --estados "traducido,del parche,revisar"`.
 
-## 6. Probar — `instalar` / `desinstalar`
+## 7. Probar — `instalar` / `desinstalar`
 
 ```
 subahibi-es instalar         # copia salida/ sobre el juego (guarda copia de lo que pisa)
@@ -121,13 +134,13 @@ sigue funcionando con el parche instalado, porque el `BGI.exe` original se toma 
 
 *Sin tocar la instalación:* `subahibi-es build --jugable` arma `subahibi-es-trabajo/jugable/`, una carpeta de prueba completa con enlaces a los archivos del juego, para ejecutarla aparte.
 
-## 7. Entregar el parche a otras personas
+## 8. Entregar el parche a otras personas
 
 Comprimí **el contenido de `subahibi-es-trabajo/salida/`** (no la carpeta en sí) en un `.zip`. Quien lo reciba lo descomprime **sobre la carpeta de instalación de su juego**
 (aceptando reemplazar `BGI.exe`) e instala la fuente. Para volver al original, le alcanza con restaurar su `BGI.exe` y borrar las carpetas `Script`, `Graphic`, `Sound` y `Voice` agregadas
 (si guarda una copia del `BGI.exe` original antes de pisarlo, mejor).
 
-## 8. Limpiar — `reset`
+## 9. Limpiar — `reset`
 
 ```
 subahibi-es reset            # borra el proyecto (subahibi-es.json); la carpeta de trabajo se conserva
@@ -142,7 +155,7 @@ subahibi-es reset --todo     # borra también subahibi-es-trabajo/ (pide confirm
 | `init [carpeta] [--parche-viejo zip]` | Una vez, en la carpeta del juego. |
 | `exportar` | Una vez (y `--forzar` para rehacer); prepara todo para traducir. |
 | `estado` (`-v`, `-vv`) | Cuando quieras ver el avance: `-v` por archivo y `-vv` también por escenario, con el porcentaje de cada uno. |
-| `text wrap …` | Opcional, para ajustar saltos de línea. |
+| `text wrap …` | Opcional, **entre traducir y `build`**. Para cambiar el ancho después: con `--reflow`. |
 | `build` | Cada vez que quieras generar el parche con lo traducido. |
 | `instalar` / `desinstalar` | Para probar en el juego y volver atrás. |
 | `reset [--todo]` | Para empezar de nuevo. |
