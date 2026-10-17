@@ -37,28 +37,32 @@ def load_old(path):
 
 
 def script_rows(name, jp_bytes, old_bytes=None):
-    """Filas (dicts de la hoja) de un escenario; con old_bytes precarga la traducción vieja alineada."""
+    """Filas (dicts de la hoja) de un escenario; con old_bytes precarga la traducción vieja alineada.
+
+    Las filas precargadas quedan «del parche», salvo las que están en una zona donde el largo del japonés y el del español
+    dejan de correlacionarse (señal de que la alineación se corrió): esas quedan «revisar»."""
     sj = scn.parse(jp_bytes)
     rj = extract.rows(sj, all_store=True)
-    mapping, flag = {}, "sin traducir"
+    mapping = {}
     re_ = []
     if old_bytes is not None:
         se = scn.parse(old_bytes)
         re_ = extract.rows(se, all_store=True)
-        mapping, agree, exact = align.align(sj, rj, se, re_)
-        flag = "del parche" if (exact and agree >= align.AGREEMENT_MIN) else "revisar"
+        mapping, _agree, _exact = align.align(sj, rj, se, re_)
     out, n = [], 0
     for i, r in enumerate(rj):
         if (r.kind == "eleccion" and not r.has_japanese) or not r.raw:
             continue          # opciones sin texto japonés y cadenas vacías: nada que traducir
         n += 1
-        es, st, nota = "", "sin traducir", ""
+        es, st = "", "sin traducir"
         if i in mapping:
-            es, st = accents.decode(re_[mapping[i]].raw), flag
-            if flag == "revisar":
-                nota = "alineación dudosa"
+            # el parche viejo termina muchas líneas con un TAB que el original no tiene: es invisible en la hoja y no aporta nada
+            es, st = accents.decode(re_[mapping[i]].raw).rstrip("\t"), "del parche"
         out.append(dict(clave=f"{name}:{n:05d}", tipo=r.kind, japones=r.raw.decode("cp932", "replace"),
-                        espanol=es, estado=st, nota=nota, pos=r.pos, hash=sheet.jp_hash(r.raw)))
+                        espanol=es, estado=st, nota="", pos=r.pos, hash=sheet.jp_hash(r.raw)))
+    pairs = [k for k, r in enumerate(out) if r["tipo"] == "mensaje" and r["espanol"]]
+    for k in align.doubtful([len(out[k]["japones"]) for k in pairs], [len(out[k]["espanol"]) for k in pairs]):
+        out[pairs[k]]["estado"], out[pairs[k]]["nota"] = "revisar", "alineación dudosa: el largo no se parece al del original"
     return out
 
 

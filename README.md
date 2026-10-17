@@ -186,8 +186,9 @@ La variable de entorno `SUBAHIBI_ES_PROJECT=/ruta/al/juego` fuerza qué proyecto
 
 ## El texto: cómo se trata
 - Se traducen mensajes, epígrafes, fechas, títulos y las opciones de elección (que se guardan junto al nombre de su imagen). El furigana no se exporta (la traducción vieja lo eliminó).
-- **Precarga** (`--parche-viejo`): el español de la traducción vieja se alinea por orden con el japonés de la 15th. Si un escenario tiene distinta cantidad de filas, o las comillas de
-  diálogo coinciden menos del 97% (señal de desalineación), todas sus filas quedan `revisar`.
+- **Precarga** (`--parche-viejo`): el español de la traducción vieja se alinea por orden con el japonés de la 15th. Las filas precargadas quedan `del parche`, salvo las que están en una zona
+  donde el largo de la línea japonesa y el de su traducción dejan de parecerse (se mide en ventanas de 40 líneas): es la señal de que la alineación se corrió, y esas filas quedan `revisar`.
+  Es una medida de largos, no del sentido: encuentra zonas sospechosas, no valida traducciones. Además se quita la tabulación que el parche viejo ponía al final de muchas líneas.
 - `text import` rechaza filas cuyo `hash` no coincide con el juego. Cada escenario generado se vuelve a leer y se comprueba que solo cambiaron los operandos de las cadenas.
 - `--tsv` en `text export` escribe además un TSV por script (diferencias legibles); el import acepta `.xlsx` y `.tsv`.
 

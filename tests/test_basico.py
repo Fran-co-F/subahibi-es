@@ -381,3 +381,25 @@ def test_export_no_crea_hojas_vacias(tmp_path, monkeypatch):
     assert sorted(f.name for f in (tmp_path / "out").iterdir()) == ["a.xlsx"]     # b.xlsx no existe: no tenía ninguna hoja con filas
     from subahibi_es.text import sheet
     assert list(sheet.read_xlsx(str(tmp_path / "out" / "a.xlsx"))) == ["con_texto"]
+
+
+def test_alineacion_dudosa_por_correlacion_de_largos():
+    import random
+    from subahibi_es.text import align
+    random.seed(7)
+    jp = [random.randint(3, 120) for _ in range(300)]
+    es = [int(x * 2.4) + random.randint(-4, 4) for x in jp]               # bien alineado: largos proporcionales
+    assert align.doubtful(jp, es) == set()
+    roto = es[:150] + es[151:] + [50]                                      # a partir de la fila 150 el español está corrido una fila
+    bad = align.doubtful(jp, roto)
+    assert bad and min(bad) >= 120 and max(bad) == 299                     # se marca desde la zona del desfase, no antes
+    assert align.doubtful(jp[:5], es[:5]) == set()                         # muy pocos pares: no se puede juzgar
+    assert align.doubtful(jp[:30], list(reversed(es[:30]))) == set(range(30))     # escenario corto sin relación: todo dudoso
+
+
+def test_precarga_quita_el_tab_final(tmp_path, monkeypatch):
+    from subahibi_es.text import export
+    jp = _escenario_con_textos(["こんにちは"])
+    old = _escenario_con_textos(["Hola\t"])                               # el parche viejo agrega un TAB final
+    rows = export.script_rows("p", jp, old)
+    assert rows[0]["espanol"] == "Hola" and rows[0]["estado"] == "del parche"
