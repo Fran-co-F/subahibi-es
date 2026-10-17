@@ -21,6 +21,10 @@ def exportar(proj, forzar=False, ocr=False, log=print):
     from .text import export as txt_export
     game = proj.root
     rep = {}
+    if not os.path.exists(proj.estado_tsv):                  # por si se borró para empezar de cero
+        os.makedirs(os.path.dirname(proj.estado_tsv), exist_ok=True)
+        with open(proj.estado_tsv, "w", encoding="utf-8", newline="\n") as f:
+            f.write(proj_mod.ESTADO_PLANTILLA)
     # 1) PNG originales de la interfaz
     orig = proj.dir("originales")
     if forzar or not glob.glob(os.path.join(orig, "*.png")):
@@ -49,6 +53,8 @@ def exportar(proj, forzar=False, ocr=False, log=print):
         r = txt_export.export_text(game, texto, None, proj.parche_viejo)
         rep["texto"] = r
         log(f"texto: {r['scripts']} escenarios, {r['filas']} filas ({r['precargadas']} precargadas desde el parche viejo) en {texto}")
+        if r["sin_texto"]:
+            log(f"       ({len(r['sin_texto'])} escenarios sin texto que traducir no tienen hoja: guiones de configuración y finales)")
     return rep
 
 

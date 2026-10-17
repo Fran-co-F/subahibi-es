@@ -65,9 +65,12 @@ def script_rows(name, jp_bytes, old_bytes=None):
 def export_text(game_dir, out_dir, arcs=None, old=None, tsv=False, xlsx=True, log=print):
     os.makedirs(out_dir, exist_ok=True)
     olds = load_old(old) if old else {}
-    by_arc, total, prefilled = {}, 0, 0
+    by_arc, total, prefilled, sin_texto = {}, 0, 0, []
     for arc, name, data in scenarios(game_dir, arcs):
         rows = script_rows(name, data, olds.get(name))
+        if not rows:                      # guiones de configuración o de finales: no hay nada que traducir
+            sin_texto.append(name)
+            continue
         by_arc.setdefault(arc, {})[sheet.safe_name(name)] = rows
         total += len(rows)
         prefilled += sum(1 for r in rows if r["estado"] != "sin traducir")
@@ -77,4 +80,5 @@ def export_text(game_dir, out_dir, arcs=None, old=None, tsv=False, xlsx=True, lo
     if xlsx:
         for arc, sheets in by_arc.items():
             sheet.write_xlsx(os.path.join(out_dir, arc + ".xlsx"), sheets)
-    return dict(scripts=sum(len(v) for v in by_arc.values()), arcs=len(by_arc), filas=total, precargadas=prefilled)
+    return dict(scripts=sum(len(v) for v in by_arc.values()), arcs=len(by_arc), filas=total, precargadas=prefilled,
+                sin_texto=sin_texto)

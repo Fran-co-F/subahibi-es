@@ -51,7 +51,7 @@ Qué hace: **comprueba que la carpeta sea el juego** (un `BGI.exe` de una versi�
 | `texto/` | Las hojas Excel/LibreOffice donde se traduce. |
 | `imagenes/traducidas/` | Las imágenes de interfaz ya traducidas (PNG o BMP). |
 | `imagenes/indice/` | La galería `index.html`. |
-| `imagenes/estado.tsv` | Tus decisiones sobre cada imagen («esta no se traduce»). |
+| `imagenes/estado.tsv` | Tus decisiones sobre cada imagen («esta no se traduce»); arranca vacío, con instrucciones. |
 | `originales/` | PNG de la interfaz original (los crea `exportar`). |
 | `backup/` | El `BGI.exe` original y copias de seguridad. |
 | `salida/` | **Lo que hay que copiar al juego** (lo crea `build`). |
@@ -67,7 +67,7 @@ subahibi-es exportar
 Hace todo el volcado sin que tengas que crear nada:
 1. Saca las **imágenes de interfaz** del juego a PNG (`originales/`).
 2. Arma la **galería** `imagenes/indice/index.html`.
-3. Exporta el **texto** a hojas (`texto/data01101.xlsx`, …; una hoja por escenario), con la traducción vieja precargada si diste el `.zip`.
+3. Exporta el **texto** a hojas (`texto/data01101.xlsx`, …; una hoja por escenario), con la traducción vieja precargada si diste el `.zip`. Los escenarios que no tienen nada que traducir (guiones de configuración y de finales, unos 14) no tienen hoja.
 
 **Es seguro repetirlo:** si ya hay hojas **no las pisa** (hay trabajo de traducción adentro). Para exportar de cero: `exportar --forzar` (guarda antes una copia en `backup/`).
 
@@ -182,7 +182,7 @@ La variable de entorno `SUBAHIBI_ES_PROJECT=/ruta/al/juego` fuerza qué proyecto
 3. **Modo UTF-8:** el punto de entrada pasa por un desvío que llama a `Text_SetEncoding(1)` antes de arrancar.
 
 **Galería (`index.html`):** no necesita servidor. Las decisiones del selector de estado se recuerdan en el navegador; una página estática no puede escribir en tu disco, por eso se guarda con los botones.
-`imagenes/estado.tsv` (copia editable de `src/subahibi_es/data/ui_status.tsv`) manda siempre sobre el OCR, que es solo una pista (~60% de aciertos, ~12% de falsos positivos).
+`imagenes/estado.tsv` (arranca como una plantilla vacía con instrucciones: ahí anotás tus decisiones) manda siempre sobre el OCR, que es solo una pista (~60% de aciertos, ~12% de falsos positivos).
 
 ## El texto: cómo se trata
 - Se traducen mensajes, epígrafes, fechas, títulos y las opciones de elección (que se guardan junto al nombre de su imagen). El furigana no se exporta (la traducción vieja lo eliminó).
@@ -231,7 +231,7 @@ equivocada sale como basura. Así los acentos son letras normales de la fuente, 
 ```
 src/subahibi_es/   cli.py, project.py, workflow.py, build.py, config.py, oldpatch.py, exe_patch.py,
                    bgi/ (arc, dsc, image, scn), images/ (export, index, import_, ocr, _page),
-                   text/ (extract, export, import_, sheet, align, accents, wrap), data/ui_status.tsv
+                   text/ (extract, export, import_, sheet, align, accents, wrap)
 tests/             pytest (datos sintéticos; con GAME_DIR=… también contra el juego real); tests/web/ prueba la galería con jsdom
 ```
 `pip install -e ".[texto,dev]"` y `pytest`. GitHub Actions corre las pruebas en Linux, Windows y macOS.

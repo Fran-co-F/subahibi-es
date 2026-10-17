@@ -27,6 +27,18 @@ SUBDIRS = {                      # nombre -> ruta dentro de la carpeta de trabaj
 }
 
 
+ESTADO_PLANTILLA = """\
+# Decisiones sobre las imágenes de interfaz: las usa la galería (imagenes/indice/index.html).
+# Una regla por línea, con TABULADORES entre las columnas:
+#     patrón<TAB>estado<TAB>nota
+#   patrón: nombre de la imagen; admite * ? [..]  (por ejemplo SGTitle99000*)
+#   estado: pendiente (hay que traducirla) | decidir | revisar | sin_japones (no tiene texto japonés)
+# Gana la primera regla que coincida. Las imágenes que pongas en imagenes/traducidas/ se marcan solas como traducidas.
+# Ejemplo (sacale el # del principio para usarlo):
+# SGTitle99000*\tdecidir\tel logo es parte de la ilustración
+"""
+
+
 class ProjectError(Exception):
     pass
 
@@ -45,7 +57,9 @@ class Project:
 
     @property
     def parche_viejo(self):
-        return self.cfg.get("parche_viejo")
+        """Ruta del parche viejo; si en el JSON está guardada relativa al proyecto, se resuelve desde la carpeta del juego."""
+        p = self.cfg.get("parche_viejo")
+        return p if (not p or os.path.isabs(p)) else os.path.join(self.root, *p.split("/"))
 
     @property
     def estado_tsv(self):
@@ -115,6 +129,13 @@ def validate_game(folder):
     return version, problems
 
 
+def _guardable(path, root):
+    """La ruta tal como se guarda en el JSON: relativa (con /) si el archivo está dentro del proyecto, si no, absoluta."""
+    path = os.path.abspath(path)
+    rel = os.path.relpath(path, root) if os.path.splitdrive(path)[0] == os.path.splitdrive(root)[0] else path
+    return rel.replace(os.sep, "/") if not rel.startswith("..") and not os.path.isabs(rel) else path
+
+
 def init(folder, parche_viejo=None, log=print):
     folder = os.path.abspath(folder)
     if not os.path.isdir(folder):
@@ -128,7 +149,7 @@ def init(folder, parche_viejo=None, log=print):
         if not os.path.exists(parche_viejo):
             raise ProjectError(f"no existe {parche_viejo}")
         proj = require(folder)
-        proj.cfg["parche_viejo"] = parche_viejo
+        proj.cfg["parche_viejo"] = _guardable(parche_viejo, proj.root)
         with open(proj.json_path, "w", encoding="utf-8") as f:
             json.dump(proj.cfg, f, ensure_ascii=False, indent=2)
             f.write("\n")
@@ -143,7 +164,7 @@ def init(folder, parche_viejo=None, log=print):
     proj = Project(folder, {
         "version_del_proyecto": 1,
         "motor": version,
-        "parche_viejo": parche_viejo,
+        "parche_viejo": _guardable(parche_viejo, folder) if parche_viejo else None,
         "creado": datetime.datetime.now().isoformat(timespec="seconds"),
     })
     for name in SUBDIRS:
@@ -155,7 +176,8 @@ def init(folder, parche_viejo=None, log=print):
         if exe_patch.identify(f.read())[1] and not os.path.exists(backup):
             shutil.copy2(exe, backup)              # copia del BGI.exe original
     if not os.path.exists(proj.estado_tsv):
-        shutil.copy2(os.path.join(os.path.dirname(__file__), "data", "ui_status.tsv"), proj.estado_tsv)
+        with open(proj.estado_tsv, "w", encoding="utf-8", newline="\n") as f:
+            f.write(ESTADO_PLANTILLA)
     with open(proj.json_path, "w", encoding="utf-8") as f:
         json.dump(proj.cfg, f, ensure_ascii=False, indent=2)
         f.write("\n")

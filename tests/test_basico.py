@@ -121,8 +121,8 @@ def test_acentos_ida_y_vuelta():
     assert accents.decode("日本語".encode("cp932")) == "日本語"
 
 
-def _escenario_con_textos(textos):
-    """Escenario sintético: por cada texto, 'str' + comando 0x140 (mensaje)."""
+def _escenario_con_textos(textos, cmd=0x140):
+    """Escenario sintético: por cada texto, 'str' + un comando (por defecto 0x140 = mensaje)."""
     import struct
     from subahibi_es.bgi import scn
     head_rest = struct.pack("<I", 0) + struct.pack("<I", 1) + b"main\0" + struct.pack("<I", 0)
@@ -133,7 +133,7 @@ def _escenario_con_textos(textos):
     start = 12 * len(textos)
     code, strs = b"", b""
     for t in textos:
-        code += struct.pack("<II", 3, start + len(strs)) + struct.pack("<I", 0x140)
+        code += struct.pack("<II", 3, start + len(strs)) + struct.pack("<I", cmd)
         strs += t.encode("cp932") + b"\0"
     return head + code + strs
 
@@ -340,3 +340,44 @@ def test_cli_init_estado_reset(tmp_path, monkeypatch, capsys):
     with pytest.raises(SystemExit) as e:
         cli.main(["build"])                                            # sin proyecto, mensaje claro
     assert "init" in str(e.value)
+
+
+def test_parche_viejo_se_guarda_relativo(tmp_path, monkeypatch):
+    """Si el parche viejo está dentro del proyecto, la ruta se guarda relativa y sobrevive a mover la carpeta."""
+    import json
+    import shutil
+    from subahibi_es import project
+    g = _juego_falso(tmp_path, monkeypatch)
+    (g / "parche.zip").write_bytes(b"x")
+    proj, _ = project.init(str(g), str(g / "parche.zip"))
+    assert json.load(open(g / "subahibi-es.json", encoding="utf-8"))["parche_viejo"] == "parche.zip"
+    assert proj.parche_viejo == str(g / "parche.zip")
+    nuevo = tmp_path / "movido"
+    shutil.move(str(g), str(nuevo))
+    assert project.find(str(nuevo)).parche_viejo == str(nuevo / "parche.zip")
+    fuera = tmp_path / "fuera.zip"
+    fuera.write_bytes(b"x")
+    proj2, _ = project.init(str(nuevo), str(fuera))                          # ya existe: actualiza; fuera del proyecto queda absoluta
+    assert project.find(str(nuevo)).parche_viejo == str(fuera)
+
+
+def test_estado_tsv_arranca_vacio(tmp_path, monkeypatch):
+    from subahibi_es import project
+    from subahibi_es.images import index
+    g = _juego_falso(tmp_path, monkeypatch)
+    proj, _ = project.init(str(g))
+    assert index.read_status(proj.estado_tsv) == []                          # solo comentarios: ninguna regla propia
+    assert "patrón<TAB>estado<TAB>nota" in open(proj.estado_tsv, encoding="utf-8").read()
+
+
+def test_export_no_crea_hojas_vacias(tmp_path, monkeypatch):
+    pytest.importorskip("openpyxl")
+    from subahibi_es.text import export
+    con = _escenario_con_textos(["hola", "mundo"])
+    sin = _escenario_con_textos(["cualquier_nombre"], cmd=0x1a1)     # una cadena que no es texto (nombre de archivo, etc.)
+    monkeypatch.setattr(export, "scenarios", lambda game, arcs=None: iter([("a", "con_texto", con), ("a", "sin_texto", sin), ("b", "solo_vacio", sin)]))
+    r = export.export_text(str(tmp_path), str(tmp_path / "out"), None, None)
+    assert r["scripts"] == 1 and sorted(r["sin_texto"]) == ["sin_texto", "solo_vacio"]
+    assert sorted(f.name for f in (tmp_path / "out").iterdir()) == ["a.xlsx"]     # b.xlsx no existe: no tenía ninguna hoja con filas
+    from subahibi_es.text import sheet
+    assert list(sheet.read_xlsx(str(tmp_path / "out" / "a.xlsx"))) == ["con_texto"]
