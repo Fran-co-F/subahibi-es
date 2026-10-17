@@ -1,0 +1,166 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+"""Las órdenes de alto nivel que trabajan sobre un proyecto (project.py): exportar, estado, instalar y desinstalar."""
+import datetime
+import glob
+import json
+import os
+import shutil
+
+from . import project as proj_mod
+
+
+def _stamp():
+    return datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+
+
+def exportar(proj, forzar=False, ocr=False, log=print):
+    """Vuelca todo lo necesario para traducir: PNG de la interfaz, galería de imágenes y hojas de texto.
+    Las hojas de texto que ya existen NO se pisan (hay trabajo de traducción adentro) salvo con forzar=True, y entonces
+    se guarda una copia en backup/."""
+    from .images import export as img_export, index as img_index
+    from .text import export as txt_export
+    game = proj.root
+    rep = {}
+    # 1) PNG originales de la interfaz
+    orig = proj.dir("originales")
+    if forzar or not glob.glob(os.path.join(orig, "*.png")):
+        n, skipped = img_export.export_arc(os.path.join(game, "sysgrp.arc"), orig)
+        rep["imagenes_exportadas"] = n
+        log(f"imágenes de la interfaz: {n} PNG en {orig}")
+    else:
+        log("imágenes de la interfaz: ya estaban exportadas")
+    # 2) imágenes de la interfaz ya traducidas por el generador (solo si todavía no hay ninguna: no se pisa nada)
+    from .images import generate, render
+    trad = proj.dir("traducidas")
+    if not os.listdir(trad):
+        if render.fonts_available():
+            n = generate.generate(orig, trad)
+            rep["imagenes_generadas"] = n
+            log(f"imágenes de la interfaz traducidas: {n} generadas en {trad}")
+        else:
+            log("imágenes de la interfaz traducidas: NO se generaron (falta una fuente latina: instalá Noto Sans/DejaVu o definí SUBAHIBI_FONT=/ruta/fuente.ttf)")
+    # 3) galería editable
+    cnt = img_index.build(orig, proj.dir("traducidas"), proj.dir("indice"), proj.estado_tsv, ocr)
+    rep["indice"] = dict(cnt)
+    log(f"galería de imágenes: {os.path.join(proj.dir('indice'), 'index.html')}")
+    # 4) hojas de texto
+    texto = proj.dir("texto")
+    hojas = glob.glob(os.path.join(texto, "*.xlsx"))
+    if hojas and not forzar:
+        log(f"texto: ya hay {len(hojas)} hojas en {texto}; NO se pisan (usá --forzar para exportar de nuevo; se guardará una copia)")
+        rep["texto"] = "conservado"
+    else:
+        if hojas:
+            dest = os.path.join(proj.dir("backup"), "texto-" + _stamp())
+            os.makedirs(dest)
+            for h in hojas:
+                shutil.move(h, dest)
+            log(f"texto: copia de las hojas anteriores en {dest}")
+        r = txt_export.export_text(game, texto, None, proj.parche_viejo)
+        rep["texto"] = r
+        log(f"texto: {r['scripts']} escenarios, {r['filas']} filas ({r['precargadas']} precargadas desde el parche viejo) en {texto}")
+    return rep
+
+
+def estado(proj, log=print):
+    """Resumen del proyecto y del avance de la traducción."""
+    from .text import sheet
+    log(f"proyecto:        {proj.root}")
+    log(f"motor:           {proj.cfg.get('motor')}")
+    log(f"parche viejo:    {proj.parche_viejo or '(no configurado)'}")
+    hojas = sorted(glob.glob(os.path.join(proj.dir("texto"), "*.xlsx")))
+    if hojas:
+        cnt = {}
+        for h in hojas:
+            for rows in sheet.read_xlsx(h).values():
+                for r in rows:
+                    cnt[r["estado"]] = cnt.get(r["estado"], 0) + 1
+        total = sum(cnt.values())
+        log(f"texto:           {total} filas en {len(hojas)} hojas")
+        for k in ("traducido", "del parche", "revisar", "sin traducir"):
+            if k in cnt:
+                log(f"                 {k:13} {cnt[k]:6}  ({100 * cnt[k] / total:.1f}%)")
+    else:
+        log("texto:           todavía no exportado (ejecutá «subahibi-es exportar»)")
+    trad = [f for f in os.listdir(proj.dir("traducidas"))] if os.path.isdir(proj.dir("traducidas")) else []
+    log(f"imágenes:        {len(trad)} traducidas en {proj.dir('traducidas')}")
+    salida = proj.dir("salida")
+    log(f"build:           {'hecho' if os.path.isdir(salida) and os.listdir(salida) else 'sin hacer'} ({salida})")
+    log(f"instalado:       {'sí' if os.path.exists(_manifest(proj)) else 'no'}")
+
+
+def _manifest(proj):
+    return os.path.join(proj.dir("backup"), "instalado.json")
+
+
+def _files(src):
+    for root, _d, fs in os.walk(src):
+        for f in fs:
+            full = os.path.join(root, f)
+            yield os.path.relpath(full, src), full
+
+
+def instalar(proj, log=print):
+    """Copia lo que dejó `build` (carpeta salida) sobre la instalación del juego.  Lo que se pisa se guarda en
+    backup/instalado/ para poder volver atrás con desinstalar."""
+    src = proj.dir("salida")
+    if not os.path.isdir(src) or not os.listdir(src):
+        raise proj_mod.ProjectError("no hay nada para instalar: ejecutá primero «subahibi-es build»")
+    mpath = _manifest(proj)
+    manifest = {}
+    if os.path.exists(mpath):
+        with open(mpath, encoding="utf-8") as f:
+            manifest = json.load(f)
+    bdir = os.path.join(proj.dir("backup"), "instalado")
+    n = 0
+    seen = set()
+    for rel, full in _files(src):
+        key = rel.replace(os.sep, "/")
+        seen.add(key)
+        dst = os.path.join(proj.root, rel)
+        if key not in manifest:
+            if os.path.exists(dst):
+                os.makedirs(os.path.dirname(os.path.join(bdir, rel)), exist_ok=True)
+                shutil.copy2(dst, os.path.join(bdir, rel))
+                manifest[key] = "reemplazado"
+            else:
+                manifest[key] = "nuevo"
+        os.makedirs(os.path.dirname(dst), exist_ok=True)
+        shutil.copy2(full, dst)
+        n += 1
+    for key in [k for k in manifest if k not in seen and manifest[k] == "nuevo"]:      # lo que ya no se genera
+        p = os.path.join(proj.root, *key.split("/"))
+        if os.path.exists(p):
+            os.remove(p)
+        del manifest[key]
+    with open(mpath, "w", encoding="utf-8") as f:
+        json.dump(manifest, f, ensure_ascii=False, indent=1)
+    log(f"{n} archivos copiados a {proj.root} ({sum(1 for v in manifest.values() if v == 'reemplazado')} originales respaldados)")
+    return n
+
+
+def desinstalar(proj, log=print):
+    """Deshace `instalar`: borra lo que se agregó y restaura lo que se pisó."""
+    mpath = _manifest(proj)
+    if not os.path.exists(mpath):
+        raise proj_mod.ProjectError("el parche no está instalado (no hay registro de una instalación)")
+    with open(mpath, encoding="utf-8") as f:
+        manifest = json.load(f)
+    bdir = os.path.join(proj.dir("backup"), "instalado")
+    borrados = restaurados = 0
+    for key, state in manifest.items():
+        rel = os.path.join(*key.split("/"))
+        dst = os.path.join(proj.root, rel)
+        if state == "nuevo":
+            if os.path.exists(dst):
+                os.remove(dst)
+                borrados += 1
+        else:
+            shutil.copy2(os.path.join(bdir, rel), dst)
+            restaurados += 1
+    for d in ("Script", "Graphic", "Sound", "Voice"):                       # carpetas que quedaron vacías
+        for root, dirs, files in os.walk(os.path.join(proj.root, d), topdown=False):
+            if not os.listdir(root):
+                os.rmdir(root)
+    os.remove(mpath)
+    log(f"{borrados} archivos borrados, {restaurados} originales restaurados")

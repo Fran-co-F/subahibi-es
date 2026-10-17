@@ -17,7 +17,7 @@ def test_imagen_cruda_ida_y_vuelta():
     im.putpixel((1, 1), (200, 100, 50, 255))
     raw = image.from_pil(im)
     assert image.is_raw_image(raw)
-    assert list(image.to_pil(raw).getdata()) == list(im.getdata())
+    assert image.to_pil(raw).tobytes() == im.tobytes()
 
 
 def test_exe_desconocido_se_rechaza():
@@ -183,9 +183,6 @@ def test_parche_viejo_zip_y_config(tmp_path, monkeypatch):
     assert list(op.scenarios()) == ["esc1"]
     r = op.copy_loose(str(tmp_path / "out"), skip=lambda kind, name, head: name == "boton")
     assert r["copiados"] == 2 and (tmp_path / "out" / "Voice" / "CVTD" / "v1").exists()
-    monkeypatch.setenv("SUBAHIBI_ES_CONFIG", str(tmp_path / "c.json"))
-    config.save(dict(juego=str(tmp_path), otra="no"))
-    assert config.load() == {"juego": str(tmp_path)}
 
 
 def test_modo_utf8_reescribe_todo():
@@ -250,3 +247,96 @@ def test_enlaces_con_respaldo(tmp_path, monkeypatch):
     assert build._link(str(src), str(tmp_path / "c")) == "copia" and (tmp_path / "c").read_bytes() == b"x" * 100
     assert build._link(str(src), str(tmp_path / "c")) == "copia"              # idempotente: no vuelve a copiar
     assert shutil.copy2  # (la copia conserva la fecha, por eso se reconoce)
+
+
+def _juego_falso(tmp_path, monkeypatch):
+    """Una 'instalación' mínima: el BGI.exe falso se registra como versión conocida."""
+    from subahibi_es import exe_patch, project
+    g = tmp_path / "juego"
+    g.mkdir()
+    (g / "BGI.exe").write_bytes(b"MZ-falso")
+    for f in project.REQUIRED[1:]:
+        (g / f).write_bytes(b"x")
+    monkeypatch.setitem(exe_patch.KNOWN_BUILDS, exe_patch.sha256(b"MZ-falso"), {"version": "falso 1.0"})
+    return g
+
+
+def test_init_valida_y_crea_el_proyecto(tmp_path, monkeypatch):
+    from subahibi_es import project
+    g = _juego_falso(tmp_path, monkeypatch)
+    proj, creado = project.init(str(g))
+    assert creado and proj.cfg["motor"] == "falso 1.0"
+    for name in ("originales", "texto", "traducidas", "indice", "backup", "salida"):
+        assert (g / project.WORK / project.SUBDIRS[name]).is_dir()
+    assert (g / project.WORK / "backup" / "BGI.exe").read_bytes() == b"MZ-falso"      # respaldo del exe original
+    assert (g / "subahibi-es.json").exists() and (g / project.WORK / "imagenes" / "estado.tsv").exists()
+    sub = g / "Script"
+    sub.mkdir()
+    assert project.find(str(sub)).root == str(g)                  # se encuentra desde una subcarpeta
+    with pytest.raises(project.ProjectError):
+        project.init(str(g))                                      # no se puede repetir
+    # agregar el parche viejo a un proyecto existente
+    z = tmp_path / "p.zip"
+    z.write_bytes(b"x")
+    assert project.init(str(g), str(z))[1] is False and project.find(str(g)).parche_viejo == str(z)
+
+
+def test_init_rechaza_lo_que_no_es_el_juego(tmp_path):
+    from subahibi_es import project
+    vacia = tmp_path / "otra"
+    vacia.mkdir()
+    with pytest.raises(project.ProjectError) as e:
+        project.init(str(vacia))
+    assert "falta BGI.exe" in str(e.value)
+    (vacia / "BGI.exe").write_bytes(b"cualquier cosa")
+    with pytest.raises(project.ProjectError) as e:
+        project.init(str(vacia))
+    assert "no es una versión conocida" in str(e.value)
+
+
+def test_reset_no_toca_el_juego(tmp_path, monkeypatch):
+    from subahibi_es import project
+    g = _juego_falso(tmp_path, monkeypatch)
+    proj, _ = project.init(str(g))
+    project.reset(proj)                                           # solo el JSON
+    assert not (g / "subahibi-es.json").exists() and (g / project.WORK).is_dir() and (g / "BGI.exe").exists()
+    proj, _ = project.init(str(g))
+    project.reset(proj, todo=True)                                # JSON y carpeta de trabajo; el juego queda
+    assert not (g / project.WORK).exists() and (g / "BGI.exe").exists() and (g / "sysgrp.arc").exists()
+
+
+def test_instalar_y_desinstalar(tmp_path, monkeypatch):
+    from subahibi_es import project, workflow
+    g = _juego_falso(tmp_path, monkeypatch)
+    proj, _ = project.init(str(g))
+    salida = g / project.WORK / "salida"
+    (salida / "Script" / "CVTD").mkdir(parents=True)
+    (salida / "Script" / "CVTD" / "esc1").write_bytes(b"nuevo")
+    (salida / "BGI.exe").write_bytes(b"MZ-parcheado")                    # pisa el exe original
+    workflow.instalar(proj)
+    assert (g / "BGI.exe").read_bytes() == b"MZ-parcheado" and (g / "Script" / "CVTD" / "esc1").read_bytes() == b"nuevo"
+    assert proj.original_exe().endswith(os.path.join("backup", "BGI.exe"))   # con el parche instalado, el original sale del respaldo
+    (salida / "Script" / "CVTD" / "esc1").write_bytes(b"nuevo2")
+    workflow.instalar(proj)                                                   # reinstalar actualiza sin perder el respaldo original
+    workflow.desinstalar(proj)
+    assert (g / "BGI.exe").read_bytes() == b"MZ-falso" and not (g / "Script").exists()
+    with pytest.raises(project.ProjectError):
+        workflow.desinstalar(proj)
+
+
+def test_cli_init_estado_reset(tmp_path, monkeypatch, capsys):
+    from subahibi_es import cli, project
+    g = _juego_falso(tmp_path, monkeypatch)
+    monkeypatch.chdir(g)
+    assert cli.main(["init"]) == 0 and (g / "subahibi-es.json").exists()
+    assert "juego detectado" in capsys.readouterr().out
+    monkeypatch.chdir(g / "subahibi-es-trabajo")                       # los comandos funcionan desde una subcarpeta
+    assert project.find().root == str(g)
+    with pytest.raises(SystemExit):
+        cli.main(["init"])                                             # ya hay un proyecto
+    assert cli.main(["reset", "--todo", "--si"]) == 0
+    assert not (g / "subahibi-es.json").exists() and not (g / "subahibi-es-trabajo").exists() and (g / "BGI.exe").exists()
+    monkeypatch.chdir(g)
+    with pytest.raises(SystemExit) as e:
+        cli.main(["build"])                                            # sin proyecto, mensaje claro
+    assert "init" in str(e.value)

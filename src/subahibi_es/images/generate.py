@@ -1,22 +1,18 @@
-#!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Genera las imágenes de interfaz en español a partir de las originales (PNG extraídas de sysgrp.arc).
 
-Preparación (una vez):
-    subahibi-es images export CARPETA_DEL_JUEGO dump              # -> dump/*.png
-Uso:
-    python3 tools/generar_ui.py dump  salida/Graphic/CVTD
+Las descripciones pequeñas en japonés de los botones del título y del menú, y la línea principal de los diálogos de
+confirmación, se borran y se reescriben en español con la misma tipografía fina, color y sombra.  Lo llama `exportar`
+(deja el resultado en la carpeta de imágenes traducidas) y se puede usar a mano: `subahibi-es images generar`.
 
-Requiere: Pillow y la fuente Noto Sans (ver ui_lib.py: REG / LIGHT).
-Para añadir una imagen: agregar su nombre y texto a TITULO / MENU (botones con 3 estados y
-una descripción pequeña) o a DIALOGOS (línea principal centrada), o escribir un caso nuevo
-con las funciones de ui_lib (clear, put, bright_bbox, save_bmp).
-Los textos están también en ../traducciones.tsv
+Para agregar una imagen: sumar su nombre y texto a TITULO / MENU (botones de tres estados con una descripción pequeña) o a
+DIALOGOS (línea principal centrada), o escribir un caso nuevo con las funciones de render (clear, put, bright_bbox, save_bmp).
+Requiere una fuente latina (variable SUBAHIBI_FONT, o Noto Sans / DejaVu / Segoe UI / Arial si están instaladas).
 """
-import os, sys, statistics
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from ui_lib import *
+import os
+import statistics
 
+from .render import *
 BLANCO, CREMA = (255, 255, 255), (255, 252, 210)
 
 # --- botones en tira (3 estados: normal | resaltado | presionado); la descripción va en los estados 2 y 3
@@ -60,10 +56,13 @@ def dialogo(src, out, name, texto):
     put(im, texto, cx, cy, 20, CREMA, align='center', track=3.0, shadow=True, sh_off=(1, 1), sh_blur=0.9, sh_alpha=200)
     save_bmp(im, os.path.join(out, name))
 
-if __name__ == '__main__':
-    if len(sys.argv) != 3: sys.exit(__doc__)
-    src, out = sys.argv[1:]; os.makedirs(out, exist_ok=True)
-    for n, t in MENU.items(): tira(src, out, n, t, 46, 'left')
-    for n, t in TITULO.items(): tira(src, out, n, t, 40, 'center')
-    for n, t in DIALOGOS.items(): dialogo(src, out, n, t)
-    print('listo:', len(MENU) + len(TITULO) + len(DIALOGOS), 'imágenes en', out)
+def generate(src, out):
+    """Escribe en `out` los BMP traducidos a partir de los PNG de `src`.  Devuelve la cantidad."""
+    os.makedirs(out, exist_ok=True)
+    for n, t in MENU.items():
+        tira(src, out, n, t, 46, 'left')
+    for n, t in TITULO.items():
+        tira(src, out, n, t, 40, 'center')
+    for n, t in DIALOGOS.items():
+        dialogo(src, out, n, t)
+    return len(MENU) + len(TITULO) + len(DIALOGOS)

@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
+"""Dibujo de texto sobre imágenes de interfaz: borrado de texto japonés y texto español con suavizado y sombra."""
 import os
 import statistics
 from PIL import Image,ImageDraw,ImageFont,ImageFilter
@@ -15,11 +16,27 @@ def find_font(*candidates):
 _NOTO = "/usr/share/fonts/noto/NotoSans-%s.ttf"
 _COMUNES = ("/usr/share/fonts/TTF/DejaVuSans.ttf", "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
             "C:/Windows/Fonts/segoeui.ttf", "C:/Windows/Fonts/arial.ttf", "/System/Library/Fonts/Supplemental/Arial.ttf")
-REG = find_font(_NOTO % "Regular", *_COMUNES)
-LIGHT = find_font(_NOTO % "Light", "C:/Windows/Fonts/segoeuil.ttf", REG)
-def render(txt,size,color,track=0.0,path=REG,stroke=0,shadow=True,sh_off=(1,1),sh_blur=1.0,sh_alpha=190):
+_cache = {}
+
+
+def reg_font():
+    """Fuente con la que se dibuja el texto de las imágenes (se busca la primera vez que se usa)."""
+    if "reg" not in _cache:
+        _cache["reg"] = find_font(_NOTO % "Regular", *_COMUNES)
+    return _cache["reg"]
+
+
+def fonts_available():
+    try:
+        reg_font()
+        return True
+    except SystemExit:
+        return False
+
+
+def render(txt,size,color,track=0.0,path=None,stroke=0,shadow=True,sh_off=(1,1),sh_blur=1.0,sh_alpha=190):
     """RGBA image of the text (supersampled), with drop shadow; returns (img, (ox,oy)) where img includes padding for shadow"""
-    f=ImageFont.truetype(path,size*SS)
+    f=ImageFont.truetype(path or reg_font(),size*SS)
     w=int(sum(f.getlength(c)+track*SS for c in txt))+8*SS; h=int(size*SS*2)
     m=Image.new('L',(w,h),0); d=ImageDraw.Draw(m); x=4*SS
     for c in txt:
