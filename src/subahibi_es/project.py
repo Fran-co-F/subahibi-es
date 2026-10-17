@@ -192,6 +192,13 @@ def reset(proj, todo=False):
     if todo:
         work = os.path.join(proj.root, WORK)
         if os.path.isdir(work):
+            w = os.path.realpath(work)
+            try:
+                dentro = os.path.commonpath([os.path.realpath(os.getcwd()), w]) == w
+            except ValueError:             # otro disco
+                dentro = False
+            if dentro:
+                os.chdir(proj.root)        # Windows no deja borrar la carpeta actual del proceso
             shutil.rmtree(work)
             removed.append(work)
     return removed
