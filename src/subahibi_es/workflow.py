@@ -29,21 +29,11 @@ def exportar(proj, forzar=False, ocr=False, log=print):
         log(f"imágenes de la interfaz: {n} PNG en {orig}")
     else:
         log("imágenes de la interfaz: ya estaban exportadas")
-    # 2) imágenes de la interfaz ya traducidas por el generador (solo si todavía no hay ninguna: no se pisa nada)
-    from .images import generate, render
-    trad = proj.dir("traducidas")
-    if not os.listdir(trad):
-        if render.fonts_available():
-            n = generate.generate(orig, trad)
-            rep["imagenes_generadas"] = n
-            log(f"imágenes de la interfaz traducidas: {n} generadas en {trad}")
-        else:
-            log("imágenes de la interfaz traducidas: NO se generaron (falta una fuente latina: instalá Noto Sans/DejaVu o definí SUBAHIBI_FONT=/ruta/fuente.ttf)")
-    # 3) galería editable
+    # 2) galería editable
     cnt = img_index.build(orig, proj.dir("traducidas"), proj.dir("indice"), proj.estado_tsv, ocr)
     rep["indice"] = dict(cnt)
     log(f"galería de imágenes: {os.path.join(proj.dir('indice'), 'index.html')}")
-    # 4) hojas de texto
+    # 3) hojas de texto
     texto = proj.dir("texto")
     hojas = glob.glob(os.path.join(texto, "*.xlsx"))
     if hojas and not forzar:

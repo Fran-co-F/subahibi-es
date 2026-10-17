@@ -176,16 +176,6 @@ def cmd_images_export(a):
     return 0
 
 
-def cmd_images_generar(a):
-    from .images import generate, render
-    if not render.fonts_available():
-        sys.exit("falta una fuente latina: instalá Noto Sans o DejaVu, o definí SUBAHIBI_FONT=/ruta/fuente.ttf")
-    n = generate.generate(need(a.originales, "originales", "la carpeta de PNG originales"),
-                          need(a.salida, "imagenes", "la carpeta de salida"))
-    print(f"{n} imágenes generadas en {need(a.salida, 'imagenes', '')}")
-    return 0
-
-
 def cmd_images_index(a):
     from .images import index
     salida = need(a.salida, "indice", "la carpeta de salida")
@@ -326,8 +316,6 @@ def _parser():
     p = im.add_parser("export", help="exporta los .arc a PNG")
     p.add_argument("juego", nargs="?"); p.add_argument("salida", nargs="?"); p.add_argument("--arc", nargs="+", default=["sysgrp"])
     p.set_defaults(f=cmd_images_export)
-    p = im.add_parser("generar", help="genera las imágenes de interfaz traducidas (botones del título/menú y diálogos)")
-    p.add_argument("originales", nargs="?"); p.add_argument("salida", nargs="?"); p.set_defaults(f=cmd_images_generar)
     p = im.add_parser("index", help="índice HTML/CSV: original vs traducida y qué falta")
     p.add_argument("originales", nargs="?"); p.add_argument("traducidas", nargs="?"); p.add_argument("salida", nargs="?")
     p.add_argument("--estado", help="TSV de decisiones manuales"); p.add_argument("--ocr", action="store_true")

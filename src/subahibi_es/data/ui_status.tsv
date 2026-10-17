@@ -7,7 +7,7 @@ SGKeyCnfg990000	pendiente	fondo del Key Config: etiquetas de acciones y una nota
 SGKeyCnfg010000	pendiente	mensaje "configurando" mientras se asigna una tecla
 SGKeyCnfg107000	pendiente	texto de "tecla sin asignar" (versión corta)
 SGKeyCnfg207000	pendiente	texto de "tecla sin asignar" (versión larga)
-SGKeyCnfg000500	pendiente	descripción del botón CONFIG (mismo caso que el menú; fácil con tools/generar_ui.py)
+SGKeyCnfg000500	pendiente	descripción pequeña del botón CONFIG de la pantalla de teclas (igual que la del menú)
 SGKeyCnfg2060[0-9]0	pendiente	teclado numérico: sufijo en japonés tras el nombre de la tecla
 SGKeyCnfg2061[0-4]0	pendiente	teclado numérico: sufijo en japonés tras el nombre de la tecla
 SGCnfgWnd02[0-9][0-9]00	decidir	retrato con el nombre del personaje en kanji (nombre propio: ¿romanizar?)

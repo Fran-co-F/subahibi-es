@@ -65,10 +65,9 @@ Desde ese momento **todos los comandos funcionan sin pasar rutas**, ejecutados d
 subahibi-es exportar
 ```
 Hace todo el volcado sin que tengas que crear nada:
-1. Saca las **imágenes de interfaz** del juego a PNG.
-2. **Genera las imágenes traducidas** que ya sabe hacer (botones del título y del menú, diálogos), usando una fuente latina del sistema (Noto Sans, DejaVu, Segoe UI o Arial; si no hay ninguna, `SUBAHIBI_FONT=/ruta/fuente.ttf`).
-3. Arma la **galería** `imagenes/indice/index.html`.
-4. Exporta el **texto** a hojas (`texto/data01101.xlsx`, …; una hoja por escenario), con la traducción vieja precargada si diste el `.zip`.
+1. Saca las **imágenes de interfaz** del juego a PNG (`originales/`).
+2. Arma la **galería** `imagenes/indice/index.html`.
+3. Exporta el **texto** a hojas (`texto/data01101.xlsx`, …; una hoja por escenario), con la traducción vieja precargada si diste el `.zip`.
 
 **Es seguro repetirlo:** si ya hay hojas **no las pisa** (hay trabajo de traducción adentro). Para exportar de cero: `exportar --forzar` (guarda antes una copia en `backup/`).
 
@@ -154,7 +153,6 @@ subahibi-es reset --todo     # borra también subahibi-es-trabajo/ (pide confirm
 - **«no encuentro un BGI.exe original»:** el `BGI.exe` del juego ya fue reemplazado y no hay respaldo; restaurá el original (reinstalá el juego o verificá archivos) o ejecutá `desinstalar`.
 - **El juego se ve en japonés:** no se instaló el parche (`instalar`), o se copió sin el `BGI.exe` de `salida/`.
 - **Salen signos raros en vez de letras:** falta instalar la fuente (`SubaHibi07Inq`) o se mezclaron archivos de otro parche. El juego corre en UTF-8: **todos** los escenarios y el exe tienen que ser los de `salida/`.
-- **«no se generaron las imágenes traducidas (falta una fuente latina)»:** instalá Noto Sans o DejaVu, o definí `SUBAHIBI_FONT=/ruta/fuente.ttf`, y volvé a `exportar`.
 - **Perdí un cambio en una hoja:** `exportar` nunca pisa hojas; si usaste `--forzar`, la versión anterior está en `backup/texto-<fecha>/`.
 - **Windows:** `instalar` y `build` copian archivos (no usan enlaces). Solo `build --jugable` intenta enlaces simbólicos (en Windows exigen el modo desarrollador); si no puede, copia y avisa.
 
@@ -169,7 +167,6 @@ Los comandos de la guía usan el proyecto. Estos hacen una sola cosa y aceptan r
 subahibi-es patch-exe BGI.exe BGI_es.exe [--fuente NOMBRE] [--sin-fuente] [--sin-proporcional] [--katakana]
 subahibi-es patch-exe --verify BGI.exe          # versión conocida y si ya está parcheado
 subahibi-es images export [CARPETA_DEL_JUEGO] [SALIDA] [--arc sysgrp …]      # .arc → PNG
-subahibi-es images generar [ORIGINALES] [SALIDA]                              # genera las imágenes traducidas conocidas
 subahibi-es images index [ORIGINALES] [TRADUCIDAS] [SALIDA] [--estado TSV] [--ocr]
 subahibi-es images import [ORIGEN] [CARPETA_DEL_JUEGO] [SALIDA]               # coloca imágenes traducidas en Graphic/CVTD
 subahibi-es text export [CARPETA_DEL_JUEGO] [SALIDA] [--parche-viejo ZIP] [--tsv]
@@ -217,7 +214,8 @@ equivocada sale como basura. Así los acentos son letras normales de la fuente, 
 ## Limitaciones conocidas
 - Los programas de sistema (`sysprg.arc`) conservan unas 480 cadenas japonesas en Shift-JIS (nombres de parámetros y mensajes de error de depuración). En una partida normal no se muestran; si un script falla, el mensaje saldría ilegible.
 - Las partidas guardadas de un idioma no cargan en el otro: no hay cambio de idioma a mitad de partida.
-- Faltan imágenes de interfaz por traducir (la pantalla de configuración y la de teclas) y las imágenes con texto fuera de `sysgrp.arc` (botones de elección, tarjetas de título, CG con texto): solo se leen imágenes crudas (DSC); `CompressedBG` no está implementado.
+- **Las imágenes no se traducen solas:** la herramienta exporta las originales y arma la galería, pero las imágenes traducidas las hacés vos (mismo nombre y tamaño que el original). Además, las imágenes con texto
+  fuera de `sysgrp.arc` (botones de elección, tarjetas de título, CG con texto) no se exportan todavía: solo se leen imágenes crudas (DSC); `CompressedBG` no está implementado.
 
 ## Cómo funciona (resumen técnico)
 - El motor da prioridad a los **archivos sueltos** sobre los `.arc`; las rutas (`Script\CVTD`, `Graphic\CVTD`, `Voice\CVTD`…) están dentro de los programas del juego (`system.arc:ipl._bp`), no en el exe.
@@ -232,7 +230,7 @@ equivocada sale como basura. Así los acentos son letras normales de la fuente, 
 
 ```
 src/subahibi_es/   cli.py, project.py, workflow.py, build.py, config.py, oldpatch.py, exe_patch.py,
-                   bgi/ (arc, dsc, image, scn), images/ (export, generate, render, index, import_, ocr, _page),
+                   bgi/ (arc, dsc, image, scn), images/ (export, index, import_, ocr, _page),
                    text/ (extract, export, import_, sheet, align, accents, wrap), data/ui_status.tsv
 tests/             pytest (datos sintéticos; con GAME_DIR=… también contra el juego real); tests/web/ prueba la galería con jsdom
 ```
