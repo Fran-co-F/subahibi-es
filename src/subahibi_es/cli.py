@@ -53,7 +53,7 @@ def cmd_init(a):
 
 
 def cmd_estado(a):
-    workflow.estado(project.require())
+    workflow.estado(project.require(), nivel=a.verbose)
     return 0
 
 
@@ -276,7 +276,8 @@ def _parser():
     p.add_argument("--parche-viejo", metavar="ARCHIVO.zip", help="el parche en español anterior (.zip o carpeta): precarga el texto y trae voces/gráficos sueltos")
     p.set_defaults(f=cmd_init)
 
-    p = sub.add_parser("estado", help="muestra el proyecto y el avance de la traducción")
+    p = sub.add_parser("estado", help="muestra el proyecto y el avance de la traducción (-v por archivo, -vv por escenario)")
+    p.add_argument("-v", "--verbose", action="count", default=0, help="-v: una tabla por archivo; -vv: además, una por escenario")
     p.set_defaults(f=cmd_estado)
 
     p = sub.add_parser("exportar", help="vuelca todo lo que hay que traducir (imágenes, galería, hojas de texto)")

@@ -403,3 +403,29 @@ def test_precarga_quita_el_tab_final(tmp_path, monkeypatch):
     old = _escenario_con_textos(["Hola\t"])                               # el parche viejo agrega un TAB final
     rows = export.script_rows("p", jp, old)
     assert rows[0]["espanol"] == "Hola" and rows[0]["estado"] == "del parche"
+
+
+def test_estado_por_archivo_y_por_escenario(tmp_path, monkeypatch):
+    pytest.importorskip("openpyxl")
+    from subahibi_es import project, workflow
+    from subahibi_es.text import sheet
+    g = _juego_falso(tmp_path, monkeypatch)
+    proj, _ = project.init(str(g))
+    fila = lambda i, st: dict(clave=f"x:{i:05d}", tipo="mensaje", japones="j", espanol="e" if st != "sin traducir" else "",
+                              estado=st, nota="", pos=i, hash="h")
+    sheet.write_xlsx(str(g / project.WORK / "texto" / "data01.xlsx"),
+                     {"esc_a": [fila(1, "del parche"), fila(2, "del parche"), fila(3, "sin traducir"), fila(4, "revisar")],
+                      "esc_b": [fila(1, "traducido")]})
+    sheet.write_xlsx(str(g / project.WORK / "texto" / "data02.xlsx"), {"esc_c": [fila(1, "sin traducir")] * 4})
+    def salida(nivel):
+        out = []
+        workflow.estado(proj, log=out.append, nivel=nivel)
+        return "\n".join(out)
+    v0, v1, v2 = salida(0), salida(1), salida(2)
+    assert "9 filas en 2 hojas" in v0 and "listo 33.3%" in v0                                 # 3 de 9 listas (2 del parche + 1 traducido)
+    assert "data01" not in v0 and "archivo" in v1 and "data01" in v1 and "esc_a" not in v1
+    linea = [l for l in v1.splitlines() if l.startswith("data01")][0]
+    assert linea.split()[:3] == ["data01", "5", "60.0%"]                                       # 3 de 5 listas
+    assert [l for l in v1.splitlines() if l.startswith("data02")][0].split()[:3] == ["data02", "4", "0.0%"]
+    assert "== data01 ==" in v2 and "esc_a" in v2 and "esc_c" in v2
+    assert [l for l in v2.splitlines() if l.startswith("esc_a")][0].split()[:3] == ["esc_a", "4", "50.0%"]

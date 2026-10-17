@@ -57,7 +57,7 @@ Qué hace: **comprueba que la carpeta sea el juego** (un `BGI.exe` de una versi�
 | `salida/` | **Lo que hay que copiar al juego** (lo crea `build`). |
 
 Desde ese momento **todos los comandos funcionan sin pasar rutas**, ejecutados desde la carpeta del juego o desde cualquiera de sus subcarpetas.
-`subahibi-es estado` te muestra en qué punto estás.
+`subahibi-es estado` te muestra en qué punto estás (`-v` desglosa por archivo y `-vv` por escenario, con el porcentaje listo de cada uno; «listo» = `traducido` + `del parche`, lo que `build` aplica por defecto).
 
 ## 3. Exportar — `exportar`
 
@@ -141,7 +141,7 @@ subahibi-es reset --todo     # borra también subahibi-es-trabajo/ (pide confirm
 |---|---|
 | `init [carpeta] [--parche-viejo zip]` | Una vez, en la carpeta del juego. |
 | `exportar` | Una vez (y `--forzar` para rehacer); prepara todo para traducir. |
-| `estado` | Cuando quieras ver el avance. |
+| `estado` (`-v`, `-vv`) | Cuando quieras ver el avance: `-v` por archivo y `-vv` también por escenario, con el porcentaje de cada uno. |
 | `text wrap …` | Opcional, para ajustar saltos de línea. |
 | `build` | Cada vez que quieras generar el parche con lo traducido. |
 | `instalar` / `desinstalar` | Para probar en el juego y volver atrás. |

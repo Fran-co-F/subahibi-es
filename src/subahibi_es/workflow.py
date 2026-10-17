@@ -58,24 +58,69 @@ def exportar(proj, forzar=False, ocr=False, log=print):
     return rep
 
 
-def estado(proj, log=print):
-    """Resumen del proyecto y del avance de la traducción."""
+ESTADOS_TEXTO = ("del parche", "traducido", "revisar", "sin traducir")
+LISTOS = ("del parche", "traducido")          # lo que `build` aplica por defecto
+
+
+def _pct(parte, total):
+    return f"{100 * parte / total:5.1f}%" if total else "    -"
+
+
+def _tabla(titulo, filas, log, ancho):
+    """filas: [(nombre, {estado: cantidad})]; imprime una línea por fila y una de totales."""
+    cab = f"{titulo:<{ancho}} {'filas':>7} {'listo':>7} {'del parche':>11} {'traducido':>10} {'revisar':>8} {'sin traducir':>13}"
+    log(cab)
+    log("-" * len(cab))
+    tot = {k: 0 for k in ESTADOS_TEXTO}
+    for nombre, c in filas:
+        n = sum(c.get(k, 0) for k in ESTADOS_TEXTO)
+        listo = sum(c.get(k, 0) for k in LISTOS)
+        log(f"{nombre:<{ancho}} {n:>7} {_pct(listo, n):>7} {c.get('del parche', 0):>11} {c.get('traducido', 0):>10} "
+            f"{c.get('revisar', 0):>8} {c.get('sin traducir', 0):>13}")
+        for k in ESTADOS_TEXTO:
+            tot[k] += c.get(k, 0)
+    n = sum(tot.values())
+    log("-" * len(cab))
+    log(f"{'TOTAL':<{ancho}} {n:>7} {_pct(sum(tot[k] for k in LISTOS), n):>7} {tot['del parche']:>11} {tot['traducido']:>10} "
+        f"{tot['revisar']:>8} {tot['sin traducir']:>13}")
+
+
+def estado(proj, log=print, nivel=0):
+    """Resumen del proyecto y del avance de la traducción.  nivel 1: una tabla por archivo; nivel 2: además, por escenario.
+    «listo» = filas «traducido» + «del parche», que es lo que `build` aplica por defecto."""
     from .text import sheet
     log(f"proyecto:        {proj.root}")
     log(f"motor:           {proj.cfg.get('motor')}")
     log(f"parche viejo:    {proj.parche_viejo or '(no configurado)'}")
     hojas = sorted(glob.glob(os.path.join(proj.dir("texto"), "*.xlsx")))
     if hojas:
+        por_archivo = []                              # [(archivo, [(escenario, {estado: n})])]
         cnt = {}
         for h in hojas:
-            for rows in sheet.read_xlsx(h).values():
+            escenarios = []
+            for nombre, rows in sheet.read_xlsx(h).items():
+                c = {}
                 for r in rows:
+                    c[r["estado"]] = c.get(r["estado"], 0) + 1
                     cnt[r["estado"]] = cnt.get(r["estado"], 0) + 1
+                escenarios.append((nombre, c))
+            por_archivo.append((os.path.splitext(os.path.basename(h))[0], escenarios))
         total = sum(cnt.values())
-        log(f"texto:           {total} filas en {len(hojas)} hojas")
-        for k in ("traducido", "del parche", "revisar", "sin traducir"):
+        log(f"texto:           {total} filas en {len(hojas)} hojas   (listo {_pct(sum(cnt.get(k, 0) for k in LISTOS), total).strip()}: traducido + del parche)")
+        for k in ESTADOS_TEXTO:
             if k in cnt:
                 log(f"                 {k:13} {cnt[k]:6}  ({100 * cnt[k] / total:.1f}%)")
+        if nivel >= 1:
+            log("")
+            filas = [(arch, {k: sum(c.get(k, 0) for _n, c in esc) for k in ESTADOS_TEXTO}) for arch, esc in por_archivo]
+            _tabla("archivo", filas, log, max(len("archivo"), max(len(a) for a, _ in filas)))
+        if nivel >= 2:
+            ancho = max(len("escenario"), max(len(n) for _a, esc in por_archivo for n, _c in esc))
+            for arch, esc in por_archivo:
+                log("")
+                log(f"== {arch} ==")
+                _tabla("escenario", esc, log, ancho)
+        log("")
     else:
         log("texto:           todavía no exportado (ejecutá «subahibi-es exportar»)")
     trad = [f for f in os.listdir(proj.dir("traducidas"))] if os.path.isdir(proj.dir("traducidas")) else []
