@@ -13,11 +13,33 @@ COPY_ONCE = ("BGI.gdb", "UserData")          # datos del jugador: se copian la p
 
 
 def _link(src, dst):
+    """Deja en dst un acceso a src.  Intenta, en orden: enlace simbólico (Linux/macOS; en Windows pide administrador o
+    modo desarrollador), enlace duro (mismo volumen) y, si nada de eso se puede, copia.  Devuelve el método usado."""
     if os.path.lexists(dst):
         if os.path.islink(dst) and os.readlink(dst) == src:
-            return
+            return "enlace simbólico"
+        if not os.path.islink(dst) and os.path.exists(dst):
+            try:
+                if os.path.samefile(src, dst):
+                    return "enlace duro"
+                a, b = os.stat(src), os.stat(dst)
+                if a.st_size == b.st_size and a.st_mtime_ns == b.st_mtime_ns:
+                    return "copia"                    # una copia anterior, igual que el original
+            except OSError:
+                pass
         os.remove(dst)
-    os.symlink(src, dst)
+    try:
+        os.symlink(src, dst)
+        return "enlace simbólico"
+    except (OSError, NotImplementedError):
+        pass
+    try:
+        os.link(src, dst)
+        return "enlace duro"
+    except OSError:
+        pass
+    shutil.copy2(src, dst)
+    return "copia"
 
 
 def build(game, out, old=None, texto=None, imagenes=None, estados=import_.APLICAR, voces=True, utf8=False, font_name=exe_patch.DEFAULT_FONT, log=print):
@@ -25,16 +47,18 @@ def build(game, out, old=None, texto=None, imagenes=None, estados=import_.APLICA
     os.makedirs(out, exist_ok=True)
     game, out = os.path.abspath(game), os.path.abspath(out)
     # 1) .arc y archivos fijos: enlaces; datos del jugador: copia única
-    n = 0
+    n, metodos = 0, {}
     for f in sorted(os.listdir(game)):
         src = os.path.join(game, f)
         if os.path.isfile(src) and (f.lower().endswith(LINK_PATTERNS) or f in LINK_NAMES or f.lower().endswith(".ico")):
-            _link(src, os.path.join(out, f)); n += 1
+            m = _link(src, os.path.join(out, f)); n += 1
+            metodos[m] = metodos.get(m, 0) + 1
     for f in COPY_ONCE:
         src, dst = os.path.join(game, f), os.path.join(out, f)
         if os.path.exists(src) and not os.path.exists(dst):
             shutil.copytree(src, dst) if os.path.isdir(src) else shutil.copy2(src, dst)
     rep["enlaces"] = n
+    rep["metodos_enlace"] = metodos
     # 2) exe parcheado
     with open(os.path.join(game, "BGI.exe"), "rb") as f:
         data = f.read()

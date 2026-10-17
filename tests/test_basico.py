@@ -43,7 +43,8 @@ def test_estado_manual_gana(tmp_path):
 @pytest.mark.skipif(not os.environ.get("GAME_DIR"), reason="GAME_DIR no definido")
 def test_juego_real_sysgrp():
     from subahibi_es.images import export
-    out = os.path.join(os.environ.get("TMPDIR", "/tmp"), "subahibi_es_test")
+    import tempfile
+    out = os.path.join(tempfile.gettempdir(), "subahibi_es_test")
     n, skipped = export.export_arc(os.path.join(os.environ["GAME_DIR"], "sysgrp.arc"), out)
     assert n == 338 and not skipped
 
@@ -231,3 +232,21 @@ def test_nombre_de_fuente_configurable():
     for malo in ("", "NombreDeFuenteDemasiadoLargo", "Fuente ñ"):
         with pytest.raises(exe_patch.PatchError):
             exe_patch.font_slot(malo)
+
+
+def test_enlaces_con_respaldo(tmp_path, monkeypatch):
+    """Sin permiso para enlaces simbólicos (Windows normal) se usa enlace duro y, si tampoco, copia."""
+    import os as _os
+    import shutil
+    from subahibi_es import build
+    src = tmp_path / "datos.arc"
+    src.write_bytes(b"x" * 100)
+    assert build._link(str(src), str(tmp_path / "a")) in ("enlace simbólico", "enlace duro")
+    def sin_permiso(*a, **k):
+        raise OSError("sin permiso")
+    monkeypatch.setattr(_os, "symlink", sin_permiso)
+    assert build._link(str(src), str(tmp_path / "b")) == "enlace duro" and (tmp_path / "b").read_bytes() == b"x" * 100
+    monkeypatch.setattr(_os, "link", sin_permiso)
+    assert build._link(str(src), str(tmp_path / "c")) == "copia" and (tmp_path / "c").read_bytes() == b"x" * 100
+    assert build._link(str(src), str(tmp_path / "c")) == "copia"              # idempotente: no vuelve a copiar
+    assert shutil.copy2  # (la copia conserva la fecha, por eso se reconoce)

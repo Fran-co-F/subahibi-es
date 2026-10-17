@@ -40,7 +40,11 @@ def cmd_build(a):
                     a.parche_viejo or config.load().get("parche_viejo"), a.texto or config.load().get("texto"),
                     a.imagenes or config.load().get("imagenes"),
                     tuple(x.strip() for x in a.estados.split(",")), not a.sin_voz, not a.katakana, a.fuente)
-    print(f"{r['enlaces']} archivos enlazados; BGI.exe parcheado")
+    mt = ", ".join(f"{v} por {k}" for k, v in r["metodos_enlace"].items())
+    print(f"{r['enlaces']} archivos enlazados ({mt}); BGI.exe parcheado")
+    if "copia" in r["metodos_enlace"]:
+        print("aviso: se copiaron archivos porque no se pudo enlazar: ocupan espacio extra en disco "
+              "(en Windows, activá el modo desarrollador para usar enlaces simbólicos)")
     if "sueltos" in r:
         print(f"{r['sueltos']} archivos sueltos del parche viejo ({r['omitidos_ui_vieja']} imágenes de la interfaz vieja omitidas)")
     t = r["texto"]
@@ -172,6 +176,9 @@ def cmd_text_wrap(a):
 
 
 def main(argv=None):
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(errors="replace")       # consolas de Windows con otra página de códigos
     ap = argparse.ArgumentParser(prog="subahibi-es", description=__doc__)
     sub = ap.add_subparsers(dest="cmd", required=True)
 

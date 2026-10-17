@@ -32,9 +32,10 @@ def japanese_chars(png_path, min_conf=60):
     small = max(w, h) <= 700 or h <= 120
     if small:
         bg = bg.resize((w * 3, h * 3), Image.LANCZOS)
-    with tempfile.NamedTemporaryFile(suffix=".png") as t:
-        bg.save(t.name)
-        out = subprocess.run(["tesseract", t.name, "stdout", "-l", "jpn", "--psm", "6" if small else "11", "tsv"],
+    with tempfile.TemporaryDirectory() as tmp:       # (NamedTemporaryFile no se puede reabrir por nombre en Windows)
+        path = os.path.join(tmp, "img.png")
+        bg.save(path)
+        out = subprocess.run(["tesseract", path, "stdout", "-l", "jpn", "--psm", "6" if small else "11", "tsv"],
                              capture_output=True, text=True,
                              env={**os.environ, "OMP_THREAD_LIMIT": "1"}).stdout
     n = 0

@@ -1,8 +1,22 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
+import os
+import statistics
 from PIL import Image,ImageDraw,ImageFont,ImageFilter
-import statistics,os
 SS=4
-REG="/usr/share/fonts/noto/NotoSans-Regular.ttf"; LIGHT="/usr/share/fonts/noto/NotoSans-Light.ttf"
+def find_font(*candidates):
+    """Primera fuente que exista: la de la variable SUBAHIBI_FONT, o una de las rutas habituales de Linux, Windows y macOS."""
+    env = os.environ.get("SUBAHIBI_FONT")
+    for c in ([env] if env else []) + list(candidates):
+        if c and os.path.exists(c):
+            return c
+    raise SystemExit("no encuentro una fuente: indicá una con la variable SUBAHIBI_FONT=/ruta/fuente.ttf")
+
+
+_NOTO = "/usr/share/fonts/noto/NotoSans-%s.ttf"
+_COMUNES = ("/usr/share/fonts/TTF/DejaVuSans.ttf", "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+            "C:/Windows/Fonts/segoeui.ttf", "C:/Windows/Fonts/arial.ttf", "/System/Library/Fonts/Supplemental/Arial.ttf")
+REG = find_font(_NOTO % "Regular", *_COMUNES)
+LIGHT = find_font(_NOTO % "Light", "C:/Windows/Fonts/segoeuil.ttf", REG)
 def render(txt,size,color,track=0.0,path=REG,stroke=0,shadow=True,sh_off=(1,1),sh_blur=1.0,sh_alpha=190):
     """RGBA image of the text (supersampled), with drop shadow; returns (img, (ox,oy)) where img includes padding for shadow"""
     f=ImageFont.truetype(path,size*SS)
