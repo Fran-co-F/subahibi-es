@@ -9,11 +9,14 @@ exe_patch.py (parche del exe).  Opciones del perfil, sección [bgi]:
 
 Valores por defecto si el perfil no los indica: [texto] archivos = ["data0*.arc"], [imagenes] archivos = ["sysgrp.arc"].
 """
+import re
+
 from ..base import EJECUTABLE, IMAGENES, PARCHE_VIEJO, TEXTO, ESTADOS_LISTOS, Motor, MotorError
 from . import exe_patch
 
 DATA_ARCS = ("data0*.arc",)
 UI_ARCS = ("sysgrp.arc",)
+ETIQUETA = re.compile(r"<[^<>\n]*>")          # etiquetas en el texto, como el furigana <r lectura>…</r>
 
 
 class MotorBGI(Motor):
@@ -81,6 +84,18 @@ class MotorBGI(Motor):
                            utf8=op.get("utf8", True), font_name=op.get("fuente") or self.fuente, exe=ejecutable,
                            exe_name=self.perfil.ejecutable or "BGI.exe", builds=self.builds,
                            data_arcs=self.data_arcs, ui_arcs=self.ui_arcs, log=log)
+
+    # ------------------------------------------------------------ control de calidad
+    def marcadores(self, texto):
+        return ETIQUETA.findall(texto)
+
+    def caracteres_invalidos(self, texto, opciones=None):
+        """En modo UTF-8 (el de siempre) solo el carácter nulo; en modo katakana, todo lo que no entra en Shift-JIS."""
+        malos = ["\0"] if "\0" in texto else []
+        if not (opciones or {}).get("utf8", True):
+            from .text import accents
+            malos += accents.unencodable(texto)
+        return malos
 
     # ------------------------------------------------------------ línea de comandos
     @classmethod

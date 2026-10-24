@@ -38,7 +38,7 @@ def doubtful(jp_lens, es_lens, window=WINDOW, corr_min=CORR_MIN):
 
 def marcar_dudosas(filas, tipo="mensaje"):
     """Pasa a «revisar» (con una nota) las filas precargadas de 'tipo' que caen en una zona dudosa (ver doubtful)."""
-    pares = [k for k, r in enumerate(filas) if r["tipo"] == tipo and r["espanol"]]
-    for k in doubtful([len(filas[k]["japones"]) for k in pares], [len(filas[k]["espanol"]) for k in pares]):
+    pares = [k for k, r in enumerate(filas) if r["tipo"] == tipo and r["traduccion"]]
+    for k in doubtful([len(filas[k]["original"]) for k in pares], [len(filas[k]["traduccion"]) for k in pares]):
         filas[pares[k]]["estado"], filas[pares[k]]["nota"] = "revisar", NOTA_DUDOSA
     return filas

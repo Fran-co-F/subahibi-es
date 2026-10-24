@@ -62,7 +62,7 @@ def _exportar_texto(proj, motor, forzar, rep, log):
             for h in hojas:
                 shutil.move(h, dest)
             log(f"texto: copia de las hojas anteriores en {dest}")
-        r = txt.exportar(motor.textos(proj.root, proj.parche_viejo), texto)
+        r = txt.exportar(motor.textos(proj.root, proj.parche_viejo), texto, idiomas=proj.idiomas)
         rep["texto"] = r
         log(f"texto: {r['scripts']} escenarios, {r['filas']} filas ({r['precargadas']} precargadas desde el parche viejo) en {texto}")
         if r["sin_texto"]:
@@ -157,6 +157,19 @@ def estado(proj, log=print, nivel=0):
     salida = proj.dir("salida")
     log(f"build:           {'hecho' if os.path.isdir(salida) and os.listdir(salida) else 'sin hacer'} ({salida})")
     log(f"instalado:       {'sí' if os.path.exists(_manifest(proj)) else 'no'}")
+
+
+def revisar(proj, estados=None, fits=None, max_lineas=None, opciones=None, log=print):
+    """Corre los controles de calidad sobre las hojas del proyecto y escribe el informe en revision.tsv.  -> [Problema]"""
+    from . import hojas, revisar as rv
+    ctx = rv.Contexto(idiomas=proj.idiomas, motor=proj.motor, fits=fits, max_lineas=max_lineas, opciones=opciones or {})
+    problemas = []
+    for h in sorted(glob.glob(os.path.join(proj.dir("texto"), "*.xlsx"))):
+        for rows in hojas.read_xlsx(h).values():
+            problemas += rv.revisar_filas(rows, ctx, estados or rv.ESTADOS)
+    problemas.sort(key=lambda p: p.nivel != rv.ERROR)          # primero los errores de todas las hojas
+    rv.escribir_tsv(proj.informe_revision, problemas)
+    return problemas
 
 
 def _manifest(proj):

@@ -15,7 +15,7 @@ import os
 import shutil
 
 from .. import motores
-from . import perfiles
+from . import hojas, perfiles
 
 NAME = "subahibi-es.json"
 WORK = "subahibi-es-trabajo"
@@ -30,6 +30,7 @@ SUBDIRS = {                      # nombre -> ruta dentro de la carpeta de trabaj
     "backup": "backup",                   # ejecutable original y copias de lo que se pisó al instalar
     "salida": "salida",                   # lo que hay que copiar al juego
     "jugable": "jugable",                 # carpeta de prueba con enlaces (build --jugable)
+    "po": "po",                           # archivos .po para herramientas de traducción (text po-export)
 }
 
 
@@ -69,6 +70,12 @@ class Project:
         return self._motor
 
     @property
+    def idiomas(self):
+        """(idioma del original, idioma de la traducción), como códigos ISO 639-1 («ja», «es»…)."""
+        i = self.cfg.get("idiomas") or {}
+        return (i.get("origen") or hojas.IDIOMAS[0], i.get("destino") or hojas.IDIOMAS[1])
+
+    @property
     def version(self):
         """Versión del juego detectada en init (en los proyectos viejos estaba guardada como «motor»)."""
         return self.cfg.get("version") if "perfil" in self.cfg else self.cfg.get("motor")
@@ -85,6 +92,10 @@ class Project:
         """Ruta del parche viejo; si en el JSON está guardada relativa al proyecto, se resuelve desde la carpeta del juego."""
         p = self.cfg.get("parche_viejo")
         return p if (not p or os.path.isabs(p)) else os.path.join(self.root, *p.split("/"))
+
+    @property
+    def informe_revision(self):
+        return os.path.join(self.root, WORK, "revision.tsv")
 
     @property
     def estado_tsv(self):
@@ -186,7 +197,9 @@ def _guardable(path, root):
     return rel.replace(os.sep, "/") if not rel.startswith("..") and not os.path.isabs(rel) else path
 
 
-def init(folder, parche_viejo=None, log=print):
+def init(folder, parche_viejo=None, log=print, destino=None):
+    """Crea el proyecto (o, si ya existe y se pasa parche_viejo, solo actualiza esa ruta).  -> (Project, creado).
+    El idioma del original sale del perfil ([texto] idioma, por defecto «ja»); el de la traducción, de 'destino' (por defecto «es»)."""
     folder = os.path.abspath(folder)
     if not os.path.isdir(folder):
         raise ProjectError(f"no existe la carpeta {folder}")
@@ -214,6 +227,7 @@ def init(folder, parche_viejo=None, log=print):
         "perfil": perfil.id,
         "motor": perfil.motor,
         "version": version,
+        "idiomas": {"origen": perfil.seccion("texto").get("idioma") or hojas.IDIOMAS[0], "destino": destino or hojas.IDIOMAS[1]},
         "parche_viejo": _guardable(parche_viejo, folder) if parche_viejo else None,
         "creado": datetime.datetime.now().isoformat(timespec="seconds"),
     }, perfil)

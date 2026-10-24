@@ -5,7 +5,7 @@ import os
 from . import hojas
 
 
-def exportar(fuente, out_dir, tsv=False, xlsx=True):
+def exportar(fuente, out_dir, tsv=False, xlsx=True, idiomas=hojas.IDIOMAS):
     """fuente: iterable de (grupo, escenario, filas), lo que genera Motor.textos().
     Escribe un XLSX por grupo (una hoja por escenario) y, con tsv=True, además un TSV por escenario en out_dir/tsv.
     Los escenarios sin filas no tienen hoja, y un grupo sin hojas no tiene XLSX."""
@@ -20,10 +20,10 @@ def exportar(fuente, out_dir, tsv=False, xlsx=True):
         prefilled += sum(1 for r in rows if r["estado"] != "sin traducir")
         if tsv:
             os.makedirs(os.path.join(out_dir, "tsv"), exist_ok=True)
-            hojas.write_tsv(os.path.join(out_dir, "tsv", hojas.safe_name(name) + ".tsv"), rows)
+            hojas.write_tsv(os.path.join(out_dir, "tsv", hojas.safe_name(name) + ".tsv"), rows, idiomas)
     if xlsx:
         for grupo, sheets in by_grupo.items():
-            hojas.write_xlsx(os.path.join(out_dir, grupo + ".xlsx"), sheets)
+            hojas.write_xlsx(os.path.join(out_dir, grupo + ".xlsx"), sheets, idiomas)
     return dict(scripts=sum(len(v) for v in by_grupo.values()), arcs=len(by_grupo), filas=total, precargadas=prefilled,
                 sin_texto=sin_texto)
 

@@ -51,7 +51,7 @@ def build_script(name, jp_bytes, rows, estados=APLICAR, utf8=False):
             t.args = (put(conv),)
             touched.add(i)
     for r in rows:                                # 2) las traducciones
-        es = (r.get("espanol") or "").replace("\r", "")
+        es = (r.get("traduccion") or "").replace("\r", "")
         if not es:
             continue
         if r.get("estado") not in estados:

@@ -9,20 +9,21 @@ import shutil
 import sys
 
 from . import motores
-from .nucleo import config, flujo as workflow, perfiles, proyecto as project
+from .nucleo import config, flujo as workflow, hojas, perfiles, proyecto as project
 from .nucleo.config import lista as _estados, need
 
 
 # ---------------------------------------------------------------- comandos del proyecto
 
 def cmd_init(a):
-    proj, creado = project.init(a.carpeta or os.getcwd(), a.parche_viejo)
+    proj, creado = project.init(a.carpeta or os.getcwd(), a.parche_viejo, destino=a.idioma)
     if not creado:
         print(f"parche viejo actualizado: {proj.parche_viejo}")
         return 0
     print(f"proyecto creado en {proj.root}")
     print(f"  juego detectado:    {proj.perfil.nombre}" + (f" ({proj.version})" if proj.version else ""))
     print(f"  carpeta de trabajo: {os.path.join(proj.root, project.WORK)}")
+    print(f"  idiomas:            {proj.idiomas[0]} -> {proj.idiomas[1]}")
     print(f"  parche viejo:       {proj.parche_viejo or '(sin configurar; agregalo con «subahibi-es init --parche-viejo ARCHIVO.zip»)'}")
     if proj.perfil.ejecutable:
         print(f"  copia del {proj.perfil.ejecutable} original guardada en la carpeta de trabajo (backup)")
@@ -39,7 +40,7 @@ def cmd_exportar(a):
     workflow.exportar(project.require(), forzar=a.forzar, ocr=a.ocr)
     proj = project.require()
     print("\nahora podés traducir:")
-    print(f"  - texto:      abrí las hojas de {proj.dir('texto')} (LibreOffice, Excel…) y completá la columna «espanol»")
+    print(f"  - texto:      abrí las hojas de {proj.dir('texto')} (LibreOffice, Excel…) y completá la columna «{hojas.nombre_idioma(proj.idiomas[1])}»")
     print(f"  - imágenes:   abrí {os.path.join(proj.dir('indice'), 'index.html')} en el navegador; guardá las traducidas en {proj.dir('traducidas')}")
     print("cuando termines (o para probar):  subahibi-es build")
     return 0
@@ -77,6 +78,56 @@ def cmd_build(a):
         print("lo que hay que copiar al juego está ahí: copiá su contenido sobre la carpeta de instalación\n"
               "(o ejecutá «subahibi-es instalar», que lo hace y guarda copia de lo que pisa)")
     return 0
+
+
+def cmd_revisar(a):
+    from collections import Counter
+    from .nucleo import wrap
+    proj = project.require()
+    if not os.path.isdir(proj.dir("texto")) or not any(f.endswith(".xlsx") for f in os.listdir(proj.dir("texto"))):
+        sys.exit("todavía no hay hojas: ejecutá «subahibi-es exportar»")
+    fits = wrap.make_fits(a.max_caracteres, a.ancho, a.fuente, a.tamano) if (a.max_caracteres or a.ancho) else None
+    probs = workflow.revisar(proj, _estados(a.estados), fits, a.max_lineas)
+    if a.solo:
+        probs = [p for p in probs if p.codigo in _estados(a.solo)]
+    errores = sum(1 for p in probs if p.nivel == "error")
+    if not probs:
+        print("sin problemas")
+    else:
+        print(f"{'problema':<14} {'nivel':<6} {'filas':>6}")
+        for (codigo, nivel), n in sorted(Counter((p.codigo, p.nivel) for p in probs).items(), key=lambda x: (x[0][1], -x[1])):
+            print(f"{codigo:<14} {nivel:<6} {n:>6}")
+        print("")
+        lim = None if a.verbose else 20
+        for p in probs[:lim]:
+            print(f"{p.nivel.upper():6} {p.clave:<24} {p.codigo}: {p.detalle}")
+        if lim and len(probs) > lim:
+            print(f"… y {len(probs) - lim} más (-v para verlos todos)")
+    print(f"\ninforme completo (para abrir con LibreOffice/Excel): {proj.informe_revision}")
+    return 1 if errores else 0
+
+
+def cmd_text_po_export(a):
+    from .nucleo import po
+    proj = project.require()
+    dest = a.salida or proj.dir("po")
+    r = po.exportar(proj.dir("texto"), dest, proj.idiomas, proj.perfil.nombre, _estados(a.estados) if a.estados else None)
+    print(f"{r['entradas']} entradas en {r['archivos']} archivos .po -> {dest}"
+          + (f" ({r['omitidas']} filas omitidas)" if r["omitidas"] else ""))
+    print("abrilos con Poedit, OmegaT, Lokalize o Weblate; para volver a las hojas:  subahibi-es text po-import")
+    return 0
+
+
+def cmd_text_po_import(a):
+    from .nucleo import po
+    proj = project.require()
+    r = po.importar(a.archivos or [proj.dir("po")], proj.dir("texto"), proj.idiomas)
+    for k, v in r["errores"][:20]:
+        print("ERROR:", k, "-", v)
+    print(f"{r['actualizadas']} filas actualizadas, {r['sin_cambios']} sin cambios, {len(r['errores'])} errores"
+          + (f", {r['desconocidas']} entradas que no están en las hojas" if r["desconocidas"] else "")
+          + ("; copia de cada hoja modificada: <hoja>.xlsx.bak (la primera vez)" if r["actualizadas"] else ""))
+    return 1 if r["errores"] else 0
 
 
 def cmd_instalar(a):
@@ -147,13 +198,13 @@ def cmd_text_wrap(a):
                 c, o = wrap.wrap_rows(rows, fits, _estados(a.estados), a.reflow, a.max_lineas)
                 tot_c += c
                 tot_o += o
-            sheet.write_xlsx(dst, sheets)
+            sheet.write_xlsx(dst, sheets, config.load()["idiomas"])
         else:
             rows = sheet.read_tsv(f)
             c, o = wrap.wrap_rows(rows, fits, _estados(a.estados), a.reflow, a.max_lineas)
             tot_c += c
             tot_o += o
-            sheet.write_tsv(dst, rows)
+            sheet.write_tsv(dst, rows, config.load()["idiomas"])
     print(f"{tot_c} textos con saltos de línea nuevos en {len(files)} archivo(s)"
           + (f"; {tot_o} con más de {a.max_lineas} líneas (marcados en «nota»)" if a.max_lineas else "")
           + ("" if a.salida or a.sin_copia else "; copia de seguridad: <archivo>.bak"))
@@ -170,6 +221,7 @@ def _parser():
     p = sub.add_parser("init", help="crea el proyecto en la carpeta de instalación del juego")
     p.add_argument("carpeta", nargs="?", help="carpeta de instalación del juego (por defecto, la actual)")
     p.add_argument("--parche-viejo", metavar="ARCHIVO.zip", help="el parche en español anterior (.zip o carpeta): precarga el texto y trae voces/gráficos sueltos")
+    p.add_argument("--idioma", metavar="CÓDIGO", help="idioma de la traducción (es, en, pt…; por defecto es)")
     p.set_defaults(f=cmd_init)
 
     p = sub.add_parser("estado", help="muestra el proyecto y el avance de la traducción (-v por archivo, -vv por escenario)")
@@ -189,6 +241,16 @@ def _parser():
     for cls in clases:
         cls.argumentos_build(p)                # opciones propias de cada motor
     p.set_defaults(f=cmd_build)
+
+    p = sub.add_parser("revisar", help="control de calidad de las traducciones (marcadores, caracteres, puntuación, largo…)")
+    p.add_argument("--estados", default="traducido,del parche,revisar", help="estados a revisar")
+    p.add_argument("--solo", metavar="CÓDIGOS", help="solo estos problemas (separados por comas: marcadores,restos,…)")
+    p.add_argument("--max-caracteres", type=int, metavar="N", help="avisa las líneas de más de N caracteres")
+    p.add_argument("--ancho", type=int, metavar="PX", help="avisa las líneas de más de PX píxeles (con --fuente y --tamano)")
+    p.add_argument("--fuente", metavar="TTF"); p.add_argument("--tamano", type=int, metavar="PX")
+    p.add_argument("--max-lineas", type=int, metavar="M", help="avisa los textos de más de M líneas")
+    p.add_argument("-v", "--verbose", action="store_true", help="listar todos los problemas (si no, los primeros 20)")
+    p.set_defaults(f=cmd_revisar)
 
     p = sub.add_parser("instalar", help="copia «salida» sobre el juego (guarda copia de lo que pisa)")
     p.set_defaults(f=cmd_instalar)
@@ -217,6 +279,13 @@ def _parser():
     p.add_argument("--reflow", action="store_true", help="primero descarta los saltos manuales existentes y vuelve a cortar")
     p.add_argument("--salida", metavar="CARPETA", help="escribir las hojas nuevas acá (por defecto, en el lugar con copia .bak)")
     p.add_argument("--sin-copia", action="store_true"); p.set_defaults(f=cmd_text_wrap)
+    p = tx.add_parser("po-export", help="exporta las hojas a archivos .po (Poedit, OmegaT, Weblate…)")
+    p.add_argument("--salida", metavar="CARPETA", help="por defecto, la carpeta «po» del proyecto")
+    p.add_argument("--estados", help="solo filas con estos estados (por defecto, todas)")
+    p.set_defaults(f=cmd_text_po_export)
+    p = tx.add_parser("po-import", help="vuelca a las hojas lo traducido en los .po")
+    p.add_argument("archivos", nargs="*", help=".po o carpetas (por defecto, la carpeta «po» del proyecto)")
+    p.set_defaults(f=cmd_text_po_import)
 
     for cls in clases:
         cls.registrar_comandos(sub, {"images": im, "text": tx})     # comandos sueltos de cada motor

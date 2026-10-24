@@ -70,8 +70,8 @@ def script_rows(name, jp_bytes, old_bytes=None):
         if i in mapping:
             # el parche viejo termina muchas líneas con un TAB que el original no tiene: es invisible en la hoja y no aporta nada
             es, st = accents.decode(re_[mapping[i]].raw).rstrip("\t"), "del parche"
-        out.append(dict(clave=f"{name}:{n:05d}", tipo=r.kind, japones=r.raw.decode("cp932", "replace"),
-                        espanol=es, estado=st, nota="", pos=r.pos, hash=hojas.jp_hash(r.raw)))
+        out.append(dict(clave=f"{name}:{n:05d}", tipo=r.kind, original=r.raw.decode("cp932", "replace"),
+                        traduccion=es, estado=st, nota="", pos=r.pos, hash=hojas.jp_hash(r.raw)))
     return alineacion.marcar_dudosas(out)
 
 

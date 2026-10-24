@@ -102,7 +102,8 @@ def cmd_text_export(a):
     juego = need(a.juego, "juego", "la carpeta del juego")
     salida = a.salida or cfg.get("texto") or "texto"
     m = _motor()
-    r = texto.exportar(m.textos(juego, a.parche_viejo or cfg.get("parche_viejo"), a.arc), salida, tsv=a.tsv, xlsx=not a.sin_xlsx)
+    r = texto.exportar(m.textos(juego, a.parche_viejo or cfg.get("parche_viejo"), a.arc), salida, tsv=a.tsv, xlsx=not a.sin_xlsx,
+                       idiomas=cfg["idiomas"])
     print(f"{r['scripts']} escenarios en {r['arcs']} .arc -> {r['filas']} filas "
           f"({r['precargadas']} precargadas desde la traducción vieja) en {salida}; "
           f"{len(r['sin_texto'])} escenarios sin texto no tienen hoja")

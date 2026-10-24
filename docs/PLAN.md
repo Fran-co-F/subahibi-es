@@ -196,7 +196,7 @@ con el parche viejo e imágenes traducidas) produce **exactamente los mismos byt
 - **Idiomas configurables** en el proyecto (`origen = "ja"`, `destino = "es"`). Las columnas `japones`/`espanol` pasan a `original`/`traduccion`;
   las hojas viejas se siguen leyendo (migración automática al exportar).
 - **Almacenamiento:** un archivo de texto por escenario (JSON Lines o TSV) como fuente de verdad, con diferencias legibles en git.
-  XLSX, **PO** y **XLIFF** como importar/exportar, para usar OmegaT, Weblate, Poedit, etc.
+  XLSX y **PO** como importar/exportar, para usar OmegaT, Weblate, Poedit, etc. (XLIFF solo si alguna herramienta lo pide: PO cubre las habituales.)
 - **Códigos de control** del motor como marcadores protegidos (`{nombre}`, `[r]`, `\n`): el motor declara una expresión regular y el núcleo
   valida que la traducción conserve los mismos marcadores.
 - **Control de calidad** (`subahibi-es revisar`): marcadores rotos, líneas que no entran, caracteres que la fuente no tiene, filas vacías con estado
@@ -284,6 +284,12 @@ python tools/prueba_dorada.py JUEGO /tmp/dorada-rama --parche-viejo ZIP --refere
 
 ## 4. Riesgos y decisiones abiertas
 
+Decisiones abiertas de la fase 2:
+- **¿Dónde vive la traducción?** Hoy, en las hojas XLSX (cómodas, pero binarias: git no muestra diferencias y dos personas no pueden fusionar).
+  Opciones: (a) seguir con XLSX y usar PO para colaborar; (b) archivos de texto por escenario como fuente de verdad y XLSX/PO como vistas.
+  La (b) es mejor para la GUI y la colaboración, pero cambia la costumbre de trabajo: decidirlo antes de la fase 5.
+- **Nombre del proyecto** generalizado.
+
 Notas que dejó la fase 1:
 - Las opciones de `build` y los comandos sueltos de cada motor se registran en el mismo `argparse`: con dos motores que definan
   la misma opción (`--fuente`) habrá conflicto. Resolverlo en la fase 4 (prefijar por motor, o armar el parser después de saber el motor del proyecto).
@@ -308,7 +314,14 @@ Notas que dejó la fase 1:
   - [x] CLI con los mismos comandos; `build` y los comandos sueltos toman opciones de cada motor
   - [x] pruebas: 33 (perfiles, registro, motor de prueba como plugin que hace todo el flujo)
   - [x] prueba dorada idéntica a `main` (3084 archivos, 98 983 filas, galería, `--jugable`, `patch-exe`, `text export`)
-- [ ] Fase 2 — modelo de datos genérico, idiomas, PO/XLIFF, QA
+- [ ] **Fase 2** — modelo de datos genérico *(en curso)*
+  - [x] filas con claves genéricas (`original`/`traduccion`); encabezados de las hojas según los idiomas del proyecto (`init --idioma`);
+        las hojas existentes se siguen leyendo y con japonés → español no cambia nada
+  - [x] `subahibi-es revisar`: controles generales + ganchos del motor (`marcadores`, `caracteres_invalidos`, `controles`); informe `revision.tsv`
+  - [x] `text po-export` / `text po-import` (con `polib`), ida y vuelta probada sobre las 98 867 filas reales
+  - [ ] contexto por fila (hablante, línea anterior/siguiente) — el motor BGI tiene que identificar el comando de nombre
+  - [ ] almacenamiento por escenario como fuente de verdad (decisión abierta, ver sección 4)
+  - [ ] nombre del proyecto (decisión abierta)
 - [ ] Fase 3 — kit de motores: `MotorTextoPlano`, tabla de cadenas, `MotorExterno`, contenedores, codificaciones, prueba de contrato
 - [ ] Fase 4 — Kirikiri y tercer motor, interfaz `Motor` v1
 - [ ] Fase 5 — API local y GUI web

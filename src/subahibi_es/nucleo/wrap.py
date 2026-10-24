@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Saltos de línea manuales en la columna «espanol» de las hojas: corte en límites de palabra.
+"""Saltos de línea manuales en la columna de la traducción de las hojas: corte en límites de palabra.
 
 El motor corta el texto solo cuando una letra no entra en la ventana, a mitad de palabra.  Este módulo parte
 las líneas en los espacios para que ninguna pase del ancho dado (en caracteres o en píxeles con la fuente del juego).
@@ -49,12 +49,12 @@ def wrap_rows(rows, fits, estados=("traducido", "del parche", "revisar"), reflow
     """Aplica wrap_text a las filas con español y estado en 'estados'.  Devuelve (cambiadas, con_demasiadas_lineas)."""
     changed = overflow = 0
     for r in rows:
-        es = r.get("espanol") or ""
+        es = r.get("traduccion") or ""
         if not es or r.get("estado") not in estados or r.get("tipo") != "mensaje":
             continue
         new = wrap_text(es, fits, reflow)
         if new != es:
-            r["espanol"] = new
+            r["traduccion"] = new
             changed += 1
         if max_lines and len([l for l in new.split("\n") if l != ""]) > max_lines:
             overflow += 1

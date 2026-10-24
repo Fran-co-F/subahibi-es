@@ -14,7 +14,7 @@ Se trabaja **dentro de la carpeta donde está instalado el juego**. El programa 
 al lado y guarda una copia del `BGI.exe` original.
 
 ```
-init  →  exportar  →  (traducir)  →  (wrap)  →  build  →  instalar          …y al final, si querés:  desinstalar  /  reset
+init  →  exportar  →  (traducir)  →  (wrap)  →  (revisar)  →  build  →  instalar          …y al final, si querés:  desinstalar  /  reset
 ```
 
 ## 0. Qué necesitás
@@ -86,6 +86,17 @@ Abrí las hojas de `texto/` con LibreOffice, Excel o Google Sheets. Cada fila es
 - Escribí el español normal: `¿ ¡ á é í ó ú ñ ü` y cualquier carácter que tenga la fuente.
 - Un salto de línea dentro de una celda es un salto de línea del juego.
 - **`build` aplica por defecto las filas `traducido` y `del parche`.** Las `revisar` se dejan en japonés hasta que las confirmes.
+- Las columnas del texto llevan el nombre de cada idioma (`japones`, `espanol`). Para traducir a otro idioma: `init --idioma en` (o `pt`, `fr`…).
+
+### O con una herramienta de traducción (Poedit, OmegaT, Weblate, Lokalize…)
+```
+subahibi-es text po-export      # un .po por hoja en subahibi-es-trabajo/po/
+… traducís con la herramienta …
+subahibi-es text po-import      # vuelve a las hojas (copia .bak de cada hoja la primera vez)
+```
+Cada entrada lleva la clave como contexto, el original y la traducción; las filas `revisar` salen marcadas como *dudosas* (fuzzy).
+Al importar: una entrada dudosa queda `revisar`; una traducción nueva o corregida queda `traducido`; una que no cambió conserva su estado;
+una entrada vacía no borra nada. Hace falta `pip install -e ".[po]"`.
 
 ### Las imágenes
 Abrí `subahibi-es-trabajo/imagenes/indice/index.html` en el navegador (doble clic). Es una galería con las imágenes originales y su estado (traducida, pendiente, a decidir…):
@@ -112,6 +123,28 @@ subahibi-es build
   (por ejemplo una palabra suelta); con `--reflow` se descartan **todos** los saltos manuales —también los que puso quien traducía a propósito, como versos— y se corta de nuevo desde cero.
 - Solo toca los mensajes con español y estado `traducido`, `del parche` o `revisar` (`--estados` para cambiarlo). Con `--max-lineas M` no cambia nada extra: solo anota en `nota` los textos que pasen de M líneas.
 - ¿No sabés el ancho? Medilo en el juego: tomá una línea que llene la ventana y contá los caracteres, o usá `--ancho PX --fuente ARCHIVO.ttf --tamano PX` para medir en píxeles con la fuente del juego.
+
+## 5b. Control de calidad — `revisar` (opcional)
+
+```
+subahibi-es revisar                                   # todo lo que tiene traducción
+subahibi-es revisar --max-caracteres 44 --max-lineas 3 --solo largo,lineas
+```
+Revisa las filas `traducido`, `del parche` y `revisar` y muestra un resumen; el informe completo queda en `subahibi-es-trabajo/revision.tsv`
+(se abre con LibreOffice/Excel). Sale con error si hay **errores** (cosas que se verán mal), no por los avisos. No modifica las hojas.
+
+| Problema | Qué es |
+|---|---|
+| `etiquetas` (error) | Una etiqueta `<x>` sin cerrar o un cierre de más (por ejemplo `<i>` sin `</i>`). |
+| `caracteres` (error) | Caracteres que el juego no puede guardar (en modo UTF-8, solo el nulo; con `--katakana`, lo que no entra en Shift-JIS). |
+| `marcadores` | Etiquetas distintas a las del original (se comparan por nombre: la lectura de `<r よみ>` puede cambiar). |
+| `sin_traducir`, `restos` | La traducción es igual al original, o tiene caracteres japoneses (sin contar `ー` y `・`, que se usan a propósito). |
+| `vacia` | Estado `traducido` sin traducción. |
+| `control` | Caracteres invisibles (TAB…) en la traducción. |
+| `espacios` | Espacios dobles, o al principio/final cuando el original no los tiene. |
+| `saltos` | El original empieza o termina con un salto de línea y la traducción no (o al revés). |
+| `puntuacion` | `¿` sin `?` o `¡` sin `!` (solo si se traduce al español). |
+| `largo`, `lineas` | Con `--max-caracteres`/`--ancho` y `--max-lineas`, como en `text wrap`. |
 
 ## 6. Armar el parche — `build`
 
@@ -152,10 +185,12 @@ subahibi-es reset --todo     # borra también subahibi-es-trabajo/ (pide confirm
 
 | Comando | Cuándo |
 |---|---|
-| `init [carpeta] [--parche-viejo zip]` | Una vez, en la carpeta del juego. |
+| `init [carpeta] [--parche-viejo zip] [--idioma es]` | Una vez, en la carpeta del juego. |
 | `exportar` | Una vez (y `--forzar` para rehacer); prepara todo para traducir. |
 | `estado` (`-v`, `-vv`) | Cuando quieras ver el avance: `-v` por archivo y `-vv` también por escenario, con el porcentaje de cada uno. |
+| `text po-export` / `text po-import` | Si traducís con Poedit, OmegaT, Weblate… en vez de las hojas. |
 | `text wrap …` | Opcional, **entre traducir y `build`**. Para cambiar el ancho después: con `--reflow`. |
+| `revisar` | Opcional, antes de `build`: control de calidad, informe en `revision.tsv`. |
 | `build` | Cada vez que quieras generar el parche con lo traducido. |
 | `instalar` / `desinstalar` | Para probar en el juego y volver atrás. |
 | `reset [--todo]` | Para empezar de nuevo. |
@@ -184,6 +219,7 @@ subahibi-es images index [ORIGINALES] [TRADUCIDAS] [SALIDA] [--estado TSV] [--oc
 subahibi-es images import [ORIGEN] [CARPETA_DEL_JUEGO] [SALIDA]               # coloca imágenes traducidas en Graphic/CVTD
 subahibi-es text export [CARPETA_DEL_JUEGO] [SALIDA] [--parche-viejo ZIP] [--tsv]
 subahibi-es text import [CARPETA_DEL_JUEGO] [SALIDA] [HOJAS…] [--estados "traducido,del parche,revisar"]
+subahibi-es text po-export [--salida CARPETA] [--estados …]   /   subahibi-es text po-import [ARCHIVOS.po…]
 subahibi-es text wrap [HOJAS…] --max-caracteres N [--max-lineas M] [--ancho PX --fuente TTF --tamano PX] [--reflow] [--salida CARPETA]
 ```
 La variable de entorno `SUBAHIBI_ES_PROJECT=/ruta/al/juego` fuerza qué proyecto usar (si no, se busca `subahibi-es.json` desde la carpeta actual hacia arriba).
@@ -258,7 +294,7 @@ La herramienta se está generalizando para cualquier novela visual (plan complet
 
 ```
 src/subahibi_es/   cli.py
-  nucleo/          proyecto, flujo, config, perfiles, texto, hojas, wrap, alineacion, enlaces, imagenes, galeria/ (index, _page, ocr)
+  nucleo/          proyecto, flujo, config, perfiles, texto, hojas, wrap, alineacion, revisar, po, enlaces, imagenes, galeria/ (index, _page, ocr)
   motores/         base (interfaz Motor), __init__ (registro)
     bgi/           arc, dsc, image, scn, exe_patch, oldpatch, build, cli, text/ (extract, export, import_, accents, align),
                    images/ (export, import_), juegos/ (perfiles TOML)

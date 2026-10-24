@@ -11,6 +11,7 @@ ejecutable = "BGI.exe"          # init guarda una copia del original
 
 [texto]
 archivos = ["data0*.arc"]       # .arc con escenarios
+idioma = "ja"                   # idioma del original (código ISO 639-1)
 
 [imagenes]
 archivos = ["sysgrp.arc"]       # .arc con las imágenes de interfaz

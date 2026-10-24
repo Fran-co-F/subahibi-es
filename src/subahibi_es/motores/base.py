@@ -71,6 +71,20 @@ class Motor:
         opciones: las que devolvió opciones_build().  ejecutable: ruta del ejecutable original.  -> informe (dict)."""
         raise NotImplementedError
 
+    # ------------------------------------------------------------ control de calidad (nucleo/revisar.py)
+    def marcadores(self, texto):
+        """Códigos de control del motor dentro de un texto (etiquetas, variables…), en orden.  La traducción tiene que
+        conservar los mismos que el original; las etiquetas <x>…</x> además tienen que estar balanceadas."""
+        return []
+
+    def caracteres_invalidos(self, texto, opciones=None):
+        """Caracteres de 'texto' que el juego no puede guardar o mostrar (opciones: las de build)."""
+        return []
+
+    def controles(self):
+        """Controles de calidad propios del motor: funciones control(fila, ctx) -> [(nivel, código, detalle)]."""
+        return []
+
     # ------------------------------------------------------------ línea de comandos
     @classmethod
     def argumentos_build(cls, parser):

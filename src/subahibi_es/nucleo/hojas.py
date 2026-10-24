@@ -2,17 +2,36 @@
 """Hojas de traducción: una fila por texto.  Formatos: TSV (por script, estable para git) y XLSX (por .arc,
 una hoja por script).
 
-Columnas: clave, tipo, japones, espanol, estado, nota, pos, hash
+Columnas: clave, tipo, <idioma original>, <idioma de la traducción>, estado, nota, pos, hash
+  En las filas (dicts) las columnas del texto se llaman siempre «original» y «traduccion»; en la hoja, el encabezado lleva el
+  nombre de cada idioma del proyecto (con japonés -> español: «japones» y «espanol»).  Al leer se acepta cualquier nombre en
+  esas dos columnas.
   clave   = <script>:<número de fila>        pos  = desplazamiento del token dentro del escenario
   hash    = sha1 corto del texto japonés (avisa si el juego cambió)
   estado  = sin traducir | traducido | revisar | del parche
 En XLSX los saltos de línea son saltos reales de celda; en TSV se escriben como \\n (y \\t, \\\\).
 """
 import hashlib
-import os
 
-COLUMNS = ["clave", "tipo", "japones", "espanol", "estado", "nota", "pos", "hash"]
+COLUMNS = ["clave", "tipo", "original", "traduccion", "estado", "nota", "pos", "hash"]     # claves de cada fila
 ESTADOS = ["sin traducir", "traducido", "revisar", "del parche"]
+IDIOMAS = ("ja", "es")                    # (original, traducción) si el proyecto no dice otra cosa
+NOMBRES_IDIOMA = {"ja": "japones", "es": "espanol", "en": "ingles", "zh": "chino", "ko": "coreano", "fr": "frances",
+                  "de": "aleman", "it": "italiano", "pt": "portugues", "ru": "ruso", "ca": "catalan", "gl": "gallego"}
+
+
+def nombre_idioma(codigo):
+    """Nombre de la columna para un idioma (sin tildes, como los demás encabezados); un código desconocido se usa tal cual."""
+    return NOMBRES_IDIOMA.get(codigo, codigo)
+
+
+def encabezado(idiomas=IDIOMAS):
+    return ["clave", "tipo", nombre_idioma(idiomas[0]), nombre_idioma(idiomas[1]), "estado", "nota", "pos", "hash"]
+
+
+def _check_head(head, where):
+    if len(head) < len(COLUMNS) or head[:2] != COLUMNS[:2] or head[4:8] != COLUMNS[4:8] or not head[2] or not head[3]:
+        raise ValueError(f"{where}: cabecera inesperada {head}")
 
 
 def jp_hash(raw):
@@ -35,9 +54,9 @@ def _unesc(s):
     return "".join(out)
 
 
-def write_tsv(path, rows):
+def write_tsv(path, rows, idiomas=IDIOMAS):
     with open(path, "w", encoding="utf-8", newline="\n") as f:
-        f.write("\t".join(COLUMNS) + "\n")
+        f.write("\t".join(encabezado(idiomas)) + "\n")
         for r in rows:
             f.write("\t".join(_esc(str(r.get(c, ""))) for c in COLUMNS) + "\n")
 
@@ -45,9 +64,7 @@ def write_tsv(path, rows):
 def read_tsv(path):
     with open(path, encoding="utf-8") as f:
         lines = f.read().split("\n")
-    head = lines[0].split("\t")
-    if head[:len(COLUMNS)] != COLUMNS:
-        raise ValueError(f"{path}: cabecera inesperada {head}")
+    _check_head(lines[0].split("\t"), path)
     rows = []
     for ln in lines[1:]:
         if not ln:
@@ -58,7 +75,7 @@ def read_tsv(path):
     return rows
 
 
-def write_xlsx(path, sheets):
+def write_xlsx(path, sheets, idiomas=IDIOMAS):
     """sheets: {nombre_de_hoja: [filas]}"""
     from openpyxl import Workbook
     from openpyxl.styles import Alignment, Font, PatternFill
@@ -68,7 +85,7 @@ def write_xlsx(path, sheets):
     widths = {"A": 22, "B": 11, "C": 60, "D": 60, "E": 13, "F": 24, "G": 9, "H": 10}
     for name, rows in sheets.items():
         ws = wb.create_sheet(title=name[:31])
-        ws.append(COLUMNS)
+        ws.append(encabezado(idiomas))
         for c in ws[1]:
             c.font = Font(bold=True, color="FFFFFF"); c.fill = PatternFill("solid", fgColor="2E4057")
         for r in rows:
@@ -96,8 +113,7 @@ def read_xlsx(path):
     for ws in wb.worksheets:
         it = ws.iter_rows(values_only=True)
         head = [str(x) if x is not None else "" for x in next(it, [])]
-        if head[:len(COLUMNS)] != COLUMNS:
-            raise ValueError(f"{path}[{ws.title}]: cabecera inesperada {head}")
+        _check_head(head, f"{path}[{ws.title}]")
         rows = []
         for vals in it:
             if vals is None or all(v is None for v in vals):

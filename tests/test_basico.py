@@ -87,7 +87,6 @@ def test_escenario_ida_y_vuelta():
 
 def test_pagina_funciones_puras(tmp_path):
     """Las funciones de index.html (glob, TSV, zip, BMP de 32 bits) se prueban con Node si está instalado."""
-    import json
     import shutil
     import subprocess
     import zipfile
@@ -153,9 +152,9 @@ def test_texto_exportar_e_importar():
     from subahibi_es.nucleo import hojas
     jp = _escenario_con_textos(["こんにちは", "さようなら"])
     rows = export.script_rows("prueba", jp)
-    assert [r["tipo"] for r in rows] == ["mensaje", "mensaje"] and rows[0]["japones"] == "こんにちは"
-    rows[0]["espanol"], rows[0]["estado"] = "¡Hola, señor!", "traducido"
-    rows[1]["espanol"], rows[1]["estado"] = "Adiós", "sin traducir"       # no se aplica
+    assert [r["tipo"] for r in rows] == ["mensaje", "mensaje"] and rows[0]["original"] == "こんにちは"
+    rows[0]["traduccion"], rows[0]["estado"] = "¡Hola, señor!", "traducido"
+    rows[1]["traduccion"], rows[1]["estado"] = "Adiós", "sin traducir"       # no se aplica
     out, rep = import_.build_script("prueba", jp, rows)
     assert rep["cambiadas"] == 1 and rep["omitidas"] == 1 and not rep["errores"]
     sj = scn.parse(jp)
@@ -164,18 +163,18 @@ def test_texto_exportar_e_importar():
     # un hash distinto (juego de otra versión) y un carácter imposible se rechazan
     rows[0]["hash"] = "00000000"
     assert import_.build_script("prueba", jp, rows)[1]["errores"]
-    rows[0]["hash"] = hojas.jp_hash("こんにちは".encode("cp932")); rows[0]["espanol"] = "precio 5 €"
+    rows[0]["hash"] = hojas.jp_hash("こんにちは".encode("cp932")); rows[0]["traduccion"] = "precio 5 €"
     assert "€" in import_.build_script("prueba", jp, rows)[1]["errores"][0][1]
 
 
 def test_tsv_escapes(tmp_path):
     from subahibi_es.nucleo import hojas as sheet
-    fila = dict(clave="a:00001", tipo="mensaje", japones="x\ty\nz\\", espanol="línea1\nlínea2", estado="traducido",
+    fila = dict(clave="a:00001", tipo="mensaje", original="x\ty\nz\\", traduccion="línea1\nlínea2", estado="traducido",
                 nota="", pos=12, hash="abcd1234")
     p = tmp_path / "a.tsv"
     sheet.write_tsv(str(p), [fila])
     leida = sheet.read_tsv(str(p))[0]
-    assert leida["japones"] == "x\ty\nz\\" and leida["espanol"] == "línea1\nlínea2" and leida["pos"] == "12"
+    assert leida["original"] == "x\ty\nz\\" and leida["traduccion"] == "línea1\nlínea2" and leida["pos"] == "12"
 
 
 def test_parche_viejo_zip_y_config(tmp_path, monkeypatch):
@@ -201,7 +200,7 @@ def test_modo_utf8_reescribe_todo():
     from subahibi_es.motores.bgi.text import export, extract, import_
     jp = _escenario_con_textos(["こんにちは", "さようなら"])
     rows = export.script_rows("prueba", jp)
-    rows[0]["espanol"], rows[0]["estado"] = "¡Hola, señor! ñé", "traducido"
+    rows[0]["traduccion"], rows[0]["estado"] = "¡Hola, señor! ñé", "traducido"
     out, rep = import_.build_script("prueba", jp, rows, utf8=True)
     nuevo = extract.rows(scn.parse(out, strings_start=scn.parse(jp).strings_start))
     assert nuevo[0].raw.decode("utf-8") == "¡Hola, señor! ñé"            # español tal cual
@@ -228,8 +227,8 @@ def test_wrap_corta_en_palabras():
     # los saltos que ya hay se respetan; con reflow se rehacen
     assert wrap.wrap_text("uno dos\ntres cuatro cinco seis siete", fits) == "uno dos\ntres cuatro cinco\nseis siete"
     assert wrap.wrap_text("uno dos\ntres", fits, reflow=True) == "uno dos tres"
-    rows = [dict(tipo="mensaje", espanol=t, estado="del parche", nota=""), dict(tipo="mensaje", espanol=t, estado="sin traducir", nota="")]
-    assert wrap.wrap_rows(rows, fits, max_lines=2) == (1, 1) and "más de 2 líneas" in rows[0]["nota"] and "\n" not in rows[1]["espanol"]
+    rows = [dict(tipo="mensaje", traduccion=t, estado="del parche", nota=""), dict(tipo="mensaje", traduccion=t, estado="sin traducir", nota="")]
+    assert wrap.wrap_rows(rows, fits, max_lines=2) == (1, 1) and "más de 2 líneas" in rows[0]["nota"] and "\n" not in rows[1]["traduccion"]
 
 
 def test_nombre_de_fuente_configurable():
@@ -434,7 +433,7 @@ def test_precarga_quita_el_tab_final(tmp_path, monkeypatch):
     jp = _escenario_con_textos(["こんにちは"])
     old = _escenario_con_textos(["Hola\t"])                               # el parche viejo agrega un TAB final
     rows = export.script_rows("p", jp, old)
-    assert rows[0]["espanol"] == "Hola" and rows[0]["estado"] == "del parche"
+    assert rows[0]["traduccion"] == "Hola" and rows[0]["estado"] == "del parche"
 
 
 def test_estado_por_archivo_y_por_escenario(tmp_path, monkeypatch):
@@ -442,7 +441,7 @@ def test_estado_por_archivo_y_por_escenario(tmp_path, monkeypatch):
     from subahibi_es.nucleo import flujo as workflow, hojas as sheet, proyecto as project
     g = _juego_falso(tmp_path, monkeypatch)
     proj, _ = project.init(str(g))
-    fila = lambda i, st: dict(clave=f"x:{i:05d}", tipo="mensaje", japones="j", espanol="e" if st != "sin traducir" else "",
+    fila = lambda i, st: dict(clave=f"x:{i:05d}", tipo="mensaje", original="j", traduccion="e" if st != "sin traducir" else "",
                               estado=st, nota="", pos=i, hash="h")
     sheet.write_xlsx(str(g / project.WORK / "texto" / "data01.xlsx"),
                      {"esc_a": [fila(1, "del parche"), fila(2, "del parche"), fila(3, "sin traducir"), fila(4, "revisar")],
@@ -560,7 +559,7 @@ class MotorDePrueba(Motor):
     def textos(self, juego, parche_viejo=None, archivos=None):
         with open(os.path.join(juego, "juego.dat"), encoding="utf-8") as f:
             lineas = f.read().splitlines()
-        filas = [dict(clave=f"esc1:{i:05d}", tipo="mensaje", japones=t, espanol="", estado="sin traducir", nota="", pos=i, hash="h")
+        filas = [dict(clave=f"esc1:{i:05d}", tipo="mensaje", original=t, traduccion="", estado="sin traducir", nota="", pos=i, hash="h")
                  for i, t in enumerate(lineas, 1)]
         yield "juego", "esc1", filas
 
@@ -569,7 +568,7 @@ class MotorDePrueba(Motor):
         os.makedirs(os.path.join(salida, "textos"), exist_ok=True)
         with open(os.path.join(salida, "textos", "esc1.txt"), "w", encoding="utf-8") as f:
             for r in (filas or {}).get("esc1", []):
-                f.write((r["espanol"] if r["estado"] in estados and r["espanol"] else r["japones"]) + "\n")
+                f.write((r["traduccion"] if r["estado"] in estados and r["traduccion"] else r["original"]) + "\n")
         return {"opciones": opciones}
 
 
@@ -593,7 +592,7 @@ def test_plugin_de_motor_con_su_perfil_hace_todo_el_flujo(tmp_path, monkeypatch)
     assert "imagenes_exportadas" not in rep and rep["texto"]["filas"] == 2           # sin capacidad «imagenes», no se intenta
     hoja = g / project.WORK / "texto" / "juego.xlsx"
     sheets = hojas.read_xlsx(str(hoja))
-    sheets["esc1"][0].update(espanol="Hola", estado="traducido")
+    sheets["esc1"][0].update(traduccion="Hola", estado="traducido")
     hojas.write_xlsx(str(hoja), sheets)
     r = flujo.build(proj, proj.dir("salida"), opciones={"x": 1}, log=lambda *a: None)
     assert r["opciones"] == {"x": 1}
@@ -601,3 +600,117 @@ def test_plugin_de_motor_con_su_perfil_hace_todo_el_flujo(tmp_path, monkeypatch)
     out = []
     flujo.estado(proj, log=out.append)
     assert any("Juego de prueba" in l for l in out) and any("listo 50.0%" in l for l in out)
+
+
+# ---------------------------------------------------------------- fase 2: idiomas, revisar, PO
+
+def _fila(i, original, traduccion="", estado="traducido", tipo="mensaje", nota=""):
+    return dict(clave=f"esc:{i:05d}", tipo=tipo, original=original, traduccion=traduccion, estado=estado, nota=nota, pos=i, hash="h")
+
+
+def test_idiomas_del_proyecto_dan_los_encabezados(tmp_path, monkeypatch):
+    pytest.importorskip("openpyxl")
+    from subahibi_es.nucleo import hojas, proyecto as project
+    g = _juego_falso(tmp_path, monkeypatch)
+    proj, _ = project.init(str(g), destino="en")
+    assert proj.idiomas == ("ja", "en") and hojas.encabezado(proj.idiomas)[2:4] == ["japones", "ingles"]
+    assert hojas.encabezado(("ja", "xx"))[3] == "xx"                        # código desconocido: tal cual
+    # una hoja con otros nombres de idioma se lee igual (las columnas se reconocen por posición)
+    p = tmp_path / "h.xlsx"
+    hojas.write_xlsx(str(p), {"esc": [_fila(1, "原文", "translation")]}, ("ja", "en"))
+    assert hojas.read_xlsx(str(p))["esc"][0]["traduccion"] == "translation"
+    t = tmp_path / "h.tsv"
+    hojas.write_tsv(str(t), [_fila(1, "原文", "traducción")])
+    assert t.read_text(encoding="utf-8").split("\n")[0].split("\t")[2:4] == ["japones", "espanol"]
+    t.write_text("clave\ttipo\tjapones\testado\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="cabecera inesperada"):
+        hojas.read_tsv(str(t))
+    # los proyectos sin «idiomas» en el JSON son japonés -> español
+    assert project.Project(str(g), {}).idiomas == ("ja", "es")
+
+
+def test_revisar_controles_generales():
+    from subahibi_es.nucleo import revisar as rv
+    from subahibi_es.motores.bgi import MotorBGI
+    from subahibi_es.nucleo import perfiles, wrap
+    m = MotorBGI(perfiles.Perfil({"id": "x", "nombre": "x", "motor": "bgi"}))
+    ctx = rv.Contexto(idiomas=("ja", "es"), motor=m, fits=wrap.make_fits(max_chars=20), max_lineas=2)
+    filas = [
+        _fila(1, "こんにちは", "Hola"),                                          # bien
+        _fila(2, "こんにちは", "", estado="traducido"),                          # vacia
+        _fila(3, "こんにちは", "こんにちは"),                                    # sin_traducir
+        _fila(4, "こんにちは", "Hola さん, saーn"),                              # restos (la ー no cuenta)
+        _fila(5, "こんにちは", "Hola\tamigo"),                                   # control
+        _fila(6, "こんにちは", "Hola  amigo "),                                  # espacios (dobles y al final)
+        _fila(7, "こんにちは\n", "Hola"),                                        # saltos
+        _fila(8, "こんにちは", "¿Qué tal. ¡Bien!"),                              # puntuacion
+        _fila(9, "こんにちは", "<i>Hola"),                                       # marcadores + etiquetas sin cerrar
+        _fila(10, "こんにちは", "Hola\0"),                                       # caracteres (NUL)
+        _fila(11, "こんにちは", "una línea demasiado larga para veinte\nb\nc"),  # largo + lineas
+        _fila(12, "こんにちは", "<r よみ>Hola</r>", estado="sin traducir"),     # no se revisa por su estado
+    ]
+    por_clave = {}
+    for p in rv.revisar_filas(filas, ctx):
+        por_clave.setdefault(int(p.clave.split(":")[1]), set()).add(p.codigo)
+    assert por_clave == {2: {"vacia"}, 3: {"sin_traducir"}, 4: {"restos"}, 5: {"control"}, 6: {"espacios"}, 7: {"saltos"},
+                         8: {"puntuacion"}, 9: {"marcadores", "etiquetas"}, 10: {"caracteres"}, 11: {"largo", "lineas"}}
+    assert rv.revisar_filas(filas, ctx)[0].nivel == rv.ERROR                  # primero los errores
+    # etiquetas balanceadas e iguales al original: sin problemas
+    assert not rv.revisar_filas([_fila(1, "<r よみ>漢字</r>", "<r lectura>Kanji</r>")], ctx)
+    # modo katakana: lo que no entra en Shift-JIS es un error
+    ctx.opciones = {"utf8": False}
+    assert {p.codigo for p in rv.revisar_filas([_fila(1, "こんにちは", "precio: 5 €")], ctx)} == {"caracteres"}
+    # destino que no es español: no hay control de ¿?
+    assert not rv.revisar_filas([_fila(1, "こんにちは", "¿What")], rv.Contexto(idiomas=("ja", "en")))
+
+
+def test_revisar_comando_escribe_el_informe(tmp_path, monkeypatch, capsys):
+    pytest.importorskip("openpyxl")
+    from subahibi_es import cli
+    from subahibi_es.nucleo import hojas, proyecto as project
+    g = _juego_falso(tmp_path, monkeypatch)
+    project.init(str(g))
+    hojas.write_xlsx(str(g / project.WORK / "texto" / "data01.xlsx"),
+                     {"esc": [_fila(1, "こんにちは", "<i>Hola"), _fila(2, "さようなら", "Adiós")]})
+    monkeypatch.chdir(g)
+    assert cli.main(["revisar"]) == 1                                         # hay un error (etiqueta sin cerrar)
+    out = capsys.readouterr().out
+    assert "etiquetas" in out and "esc:00001" in out and "esc:00002" not in out
+    informe = (g / project.WORK / "revision.tsv").read_text(encoding="utf-8").splitlines()
+    assert informe[0].startswith("clave\tnivel") and len(informe) == 3      # etiquetas + marcadores
+
+
+def test_po_ida_y_vuelta(tmp_path, monkeypatch):
+    pytest.importorskip("openpyxl")
+    polib = pytest.importorskip("polib")
+    from subahibi_es.nucleo import hojas, po
+    textos = tmp_path / "texto"
+    textos.mkdir()
+    hojas.write_xlsx(str(textos / "data01.xlsx"), {"esc": [
+        _fila(1, "こんにちは\nさん", "Hola\nseñor", estado="del parche"),
+        _fila(2, "さようなら", "Chau", estado="revisar", nota="dudoso"),
+        _fila(3, "ありがとう", "", estado="sin traducir"),
+        _fila(4, "すみません", "Perdón", estado="traducido")]})
+    r = po.exportar(str(textos), str(tmp_path / "po"), ("ja", "es"), "Prueba")
+    assert r == {"archivos": 1, "entradas": 4, "omitidas": 0}
+    pf = polib.pofile(str(tmp_path / "po" / "data01.po"))
+    e = {x.msgctxt: x for x in pf}
+    assert e["esc:00001"].msgid == "こんにちは\nさん" and e["esc:00001"].msgstr == "Hola\nseñor"
+    assert "fuzzy" in e["esc:00002"].flags and e["esc:00002"].tcomment == "dudoso" and pf.metadata["Language"] == "es"
+    # sin tocar nada: importar no cambia las hojas ni deja copia
+    assert po.importar([str(tmp_path / "po")], str(textos))["actualizadas"] == 0 and not (textos / "data01.xlsx.bak").exists()
+    # quien traduce: confirma la dudosa, traduce la vacía, corrige una y toca una entrada de otra versión del juego
+    e["esc:00002"].flags.remove("fuzzy")
+    e["esc:00003"].msgstr = "Gracias"
+    e["esc:00004"].msgstr = "Disculpe"; e["esc:00004"].flags.append("fuzzy")
+    e["esc:00001"].msgid = "otro texto"
+    pf.append(polib.POEntry(msgctxt="no:00001", msgid="x", msgstr="y"))
+    pf.save()
+    r = po.importar([str(tmp_path / "po")], str(textos))
+    assert r["actualizadas"] == 3 and r["desconocidas"] == 1 and [k for k, _ in r["errores"]] == ["esc:00001"]
+    filas = {f["clave"]: f for f in hojas.read_xlsx(str(textos / "data01.xlsx"))["esc"]}
+    assert (filas["esc:00002"]["traduccion"], filas["esc:00002"]["estado"]) == ("Chau", "traducido")
+    assert (filas["esc:00003"]["traduccion"], filas["esc:00003"]["estado"]) == ("Gracias", "traducido")
+    assert (filas["esc:00004"]["traduccion"], filas["esc:00004"]["estado"]) == ("Disculpe", "revisar")
+    assert (filas["esc:00001"]["traduccion"], filas["esc:00001"]["estado"]) == ("Hola\nseñor", "del parche")    # rechazada
+    assert (textos / "data01.xlsx.bak").exists()
