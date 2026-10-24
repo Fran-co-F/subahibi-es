@@ -16,17 +16,18 @@ def build(game, out, old=None, filas=None, imagenes=None, estados=import_.APLICA
     os.makedirs(out, exist_ok=True)
     game, out = os.path.abspath(game), os.path.abspath(out)
     ui_paths = [os.path.join(game, a) for a in ui_arcs]
-    # 1) exe parcheado
-    with open(exe or os.path.join(game, exe_name), "rb") as f:
-        data = f.read()
-    try:
-        patched = exe_patch.patch(data, builds or {}, font=bool(font_name), utf8=utf8, font_name=font_name)
-    except exe_patch.PatchError as e:
-        raise SystemExit(f"error: {e}")
-    with open(os.path.join(out, exe_name), "wb") as f:
-        f.write(patched)
-    log(f"{exe_name} parcheado (" + (f"fuente «{font_name}», " if font_name else "sin cambiar la fuente, ")
-        + ("modo UTF-8" if utf8 else "modo katakana") + ")")
+    # 1) exe parcheado (si el perfil declara un ejecutable)
+    if exe_name:
+        with open(exe or os.path.join(game, exe_name), "rb") as f:
+            data = f.read()
+        try:
+            patched = exe_patch.patch(data, builds or {}, font=bool(font_name), utf8=utf8, font_name=font_name)
+        except exe_patch.PatchError as e:
+            raise SystemExit(f"error: {e}")
+        with open(os.path.join(out, exe_name), "wb") as f:
+            f.write(patched)
+        log(f"{exe_name} parcheado (" + (f"fuente «{font_name}», " if font_name else "sin cambiar la fuente, ")
+            + ("modo UTF-8" if utf8 else "modo katakana") + ")")
     # 2) archivos sueltos del parche viejo, sin lo que se regenera o ya no sirve
     if old:
         ui_old = set()                            # imágenes de la interfaz vieja: tapan las nuevas

@@ -3,6 +3,8 @@
 import struct
 from dataclasses import dataclass
 
+from ..kit.contenedores import Contenedor
+
 MAGIC = b"BURIKO ARC20"
 
 
@@ -13,7 +15,7 @@ class Entry:
     size: int
 
 
-class Arc:
+class Arc(Contenedor):
     """Un contenedor .arc: tabla de entradas de 0x80 bytes y datos a continuación."""
 
     def __init__(self, path):
@@ -48,3 +50,9 @@ class Arc:
         with open(self.path, "rb") as f:
             f.seek(self._base + e.offset)
             return f.read(e.size)
+
+    nombres, leer = names, read                  # interfaz de kit.contenedores.Contenedor
+
+    @property
+    def ruta(self):
+        return self.path

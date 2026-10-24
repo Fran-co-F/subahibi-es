@@ -8,6 +8,7 @@ cadenas nuevas van al final, nada se reubica: saltos, exportaciones y demás ope
 """
 import os
 from .. import scn
+from ...kit.cadenas import TablaDeCadenas
 from ....nucleo import hojas
 from . import accents, extract
 from .export import DATA_ARCS, scenarios
@@ -26,15 +27,10 @@ def build_script(name, jp_bytes, rows, estados=APLICAR, utf8=False):
     sc = scn.parse(jp_bytes)
     by_pos = {r.pos: r for r in extract.rows(sc, all_store=True)}
     tok_at = {t.pos: i for i, t in enumerate(sc.tokens)}
-    new_tail, cache, errs = bytearray(sc.tail), {}, []
+    tabla, errs = TablaDeCadenas(sc.tail, sc.strings_start), []
+    put = tabla.agregar                          # cadena nueva al final de la tabla -> su desplazamiento
     touched = set()                              # índices de tokens 'str' que cambian de operando
     changed = skipped = unconverted = 0
-
-    def put(raw):
-        if raw not in cache:
-            cache[raw] = sc.strings_start + len(new_tail)
-            new_tail.extend(raw + b"\0")
-        return cache[raw]
 
     if utf8:                                      # 1) todo el escenario a UTF-8
         for i, t in enumerate(sc.tokens):
@@ -81,7 +77,7 @@ def build_script(name, jp_bytes, rows, estados=APLICAR, utf8=False):
         changed += 1
     if not touched:
         return None, dict(cambiadas=0, omitidas=skipped, errores=errs, sin_convertir=unconverted)
-    sc.tail = bytes(new_tail)
+    sc.tail = tabla.bytes()
     out = scn.serialize(sc)
     # comprobación: se lee de nuevo y, salvo los operandos de las cadenas reapuntadas, los tokens son idénticos
     orig, chk = scn.parse(jp_bytes), scn.parse(out, strings_start=sc.strings_start)

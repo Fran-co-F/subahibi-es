@@ -9,6 +9,7 @@ exe_patch.py (parche del exe).  Opciones del perfil, sección [bgi]:
 
 Valores por defecto si el perfil no los indica: [texto] archivos = ["data0*.arc"], [imagenes] archivos = ["sysgrp.arc"].
 """
+import os
 import re
 
 from ..base import EJECUTABLE, IMAGENES, PARCHE_VIEJO, TEXTO, ESTADOS_LISTOS, Motor, MotorError
@@ -82,8 +83,29 @@ class MotorBGI(Motor):
         op = opciones or {}
         return build.build(juego, salida, parche_viejo, filas, imagenes, estados, voces=op.get("voces", True),
                            utf8=op.get("utf8", True), font_name=op.get("fuente") or self.fuente, exe=ejecutable,
-                           exe_name=self.perfil.ejecutable or "BGI.exe", builds=self.builds,
+                           exe_name=self.perfil.ejecutable, builds=self.builds,
                            data_arcs=self.data_arcs, ui_arcs=self.ui_arcs, log=log)
+
+    def releer(self, juego, salida):
+        """Los textos que mostraría el juego con salida/Script/CVTD encima (los escenarios sueltos tapan los del .arc)."""
+        from . import scn
+        from .text import accents, export, extract
+
+        def texto(raw):
+            try:
+                return raw.decode("utf-8")              # modo UTF-8 (también vale para el japonés convertido)
+            except UnicodeDecodeError:
+                return accents.decode(raw)              # modo katakana o escenario sin tocar (Shift-JIS)
+        for arc, name, jp in export.scenarios(juego, patrones=self.data_arcs):
+            filas = export.script_rows(name, jp)
+            suelto = os.path.join(salida, "Script", "CVTD", name)
+            if os.path.exists(suelto):
+                with open(suelto, "rb") as f:
+                    nuevo = scn.parse(f.read(), strings_start=scn.parse(jp).strings_start)
+                por_pos = {r.pos: r.raw for r in extract.rows(nuevo, all_store=True)}
+                for f in filas:
+                    f["original"] = texto(por_pos[f["pos"]])
+            yield arc, name, filas
 
     # ------------------------------------------------------------ control de calidad
     def marcadores(self, texto):

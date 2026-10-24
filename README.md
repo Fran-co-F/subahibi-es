@@ -318,13 +318,17 @@ La herramienta se está generalizando para cualquier novela visual (plan complet
   (por ejemplo [`motores/bgi/juegos/subahibi-15th.toml`](src/tl_organizer/motores/bgi/juegos/subahibi-15th.toml)). `init` prueba todos los perfiles y usa el que coincide.
   Se buscan en las carpetas de `TL_ORGANIZER_PERFILES`, en `~/.config/tl-organizer/juegos/` (Windows: `%APPDATA%\tl-organizer\juegos\`) y en los incluidos en cada motor;
   un perfil propio con el mismo `id` reemplaza al incluido. Así, otra versión del exe o otro juego BGI se soporta escribiendo un TOML, sin tocar código.
+- **El kit para escribir motores** (`motores/kit/`): clases base para scripts de texto (`MotorTextoPlano`: unas expresiones regulares y listo),
+  para envolver una herramienta de línea de comandos (`MotorExterno`) y piezas para formatos binarios (tabla de cadenas, contenedores,
+  codificaciones), más una **prueba de contrato** que se le corre a cualquier motor. Guía paso a paso: [`docs/MOTORES.md`](docs/MOTORES.md).
 
 ## Estructura y pruebas
 
 ```
 src/tl_organizer/   cli.py
   nucleo/          proyecto, flujo, config, perfiles, texto, hojas, wrap, alineacion, almacen, vistas, revisar, po, enlaces, imagenes, galeria/ (index, _page, ocr)
-  motores/         base (interfaz Motor), __init__ (registro)
+  motores/         base (interfaz Motor), __init__ (registro), contrato (prueba de contrato)
+    kit/           codificaciones, contenedores, cadenas, texto_plano (MotorTextoPlano), externo (MotorExterno)
     bgi/           arc, dsc, image, scn, exe_patch, oldpatch, build, cli, text/ (extract, export, import_, accents, align),
                    images/ (export, import_), juegos/ (perfiles TOML)
 tests/             pytest (datos sintéticos; con GAME_DIR=… también contra el juego real); tests/web/ prueba la galería con jsdom

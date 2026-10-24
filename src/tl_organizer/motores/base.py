@@ -69,7 +69,13 @@ class Motor:
                   parche_viejo=None, ejecutable=None, log=print):
         """Escribe en salida lo que hay que copiar al juego.
         filas: {escenario: [filas]} leídas de las hojas, o None si no hay hojas.  imagenes: carpeta de imágenes traducidas o None.
-        opciones: las que devolvió opciones_build().  ejecutable: ruta del ejecutable original.  -> informe (dict)."""
+        opciones: las que devolvió opciones_build().  ejecutable: ruta del ejecutable original.  -> informe (dict);
+        para el texto, informe["texto"] = {"scripts", "cambiadas", "omitidas", "errores": [(clave, motivo)]}."""
+        raise NotImplementedError
+
+    def releer(self, juego, salida):
+        """Como textos(), pero viendo el juego con la salida de construir() encima: lo que mostraría el juego con el parche.
+        Opcional; lo usa la prueba de contrato (motores/contrato.py) para verificar la ida y vuelta."""
         raise NotImplementedError
 
     # ------------------------------------------------------------ control de calidad (nucleo/revisar.py)

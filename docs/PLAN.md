@@ -320,7 +320,13 @@ Notas que dejó la fase 1:
         fusión a tres bandas por fila (huella oculta en cada vista): lo editado vuelve solo y los conflictos se informan sin pisar nada;
         migración automática de los proyectos con `texto/*.xlsx`; `.gitignore` en la carpeta de trabajo
   - [x] nombre del proyecto: **tl-organizer** (paquete `tl_organizer`; `subahibi-es` queda como alias y los proyectos viejos se abren)
-- [ ] Fase 3 — kit de motores: `MotorTextoPlano`, tabla de cadenas, `MotorExterno`, contenedores, codificaciones, prueba de contrato
+- [x] **Fase 3** — kit de motores (`motores/kit/`) y guía `docs/MOTORES.md`
+  - [x] `codificaciones` (detección, `Sustitucion`), `contenedores` (`Carpeta`, `Zip`; el `.arc` de BGI es un `Contenedor`),
+        `cadenas` (`TablaDeCadenas`, `reapuntar`, `verificar_operandos`; BGI la usa), con los acentos de BGI sobre `Sustitucion`
+  - [x] `MotorTextoPlano`: patrones, `ignorar`, saltos de línea escapados, opciones del perfil, `releer`
+  - [x] `MotorExterno`: programa/lanzador (Wine para `.exe`), carpetas temporales, validación de cada fila antes de insertar
+  - [x] `motores/contrato.py`; lo pasan BGI (modos UTF-8 y katakana, `releer` sobre los escenarios sueltos), un motor de texto plano
+        de juguete y una herramienta externa simulada; BGI ya no exige un exe si el perfil no declara uno
 - [ ] Fase 4 — Kirikiri y tercer motor, interfaz `Motor` v1
 - [ ] Fase 5 — API local y GUI web
 - [ ] Fase 6 — explorador de archivos, asistente de perfiles, generador de plugins

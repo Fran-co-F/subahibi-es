@@ -770,3 +770,205 @@ def test_hojas_son_vistas_con_fusion_a_tres_bandas(tmp_path, monkeypatch):
     proj.almacen.guardar("data01", "esc", filas)
     flujo.sincronizar(proj, log.append)
     assert hojas.read_xlsx(str(hoja))["esc"][2]["traduccion"] == "Tres."
+
+
+# ---------------------------------------------------------------- fase 3: kit para escribir motores
+
+def test_kit_codificaciones():
+    from tl_organizer.motores.kit import codificaciones as k
+    assert k.decodificar("¿Qué?".encode("utf-8")) == ("¿Qué?", "utf-8")
+    assert k.decodificar("日本語".encode("cp932")) == ("日本語", "cp932")
+    assert k.decodificar("﻿hola".encode("utf-8"))[1] == "utf-8-sig" and k.decodificar("hola".encode("utf-16"))[1] == "utf-16"
+    with pytest.raises(k.CodificacionError):
+        k.decodificar(b"\xff\xfe\x00"[1:] + b"\x81", ("utf-8",))
+    with pytest.raises(k.CodificacionError, match="€"):
+        k.codificar("5 €", "cp932")
+    s = k.Sustitucion({"ñ": "ﾃ"}, "cp932")
+    assert s.decodificar(s.codificar("año")) == "año" and s.no_codificables("año €") == ["€"]
+
+
+def test_kit_contenedores(tmp_path):
+    import zipfile
+    from tl_organizer.motores.kit import Carpeta, Zip, escribir_suelto
+    from tl_organizer.motores.kit.contenedores import Contenedor
+    escribir_suelto(str(tmp_path / "j"), "scn/a.txt", b"A")
+    escribir_suelto(str(tmp_path / "j"), "scn/sub/b.TXT", b"B")
+    escribir_suelto(str(tmp_path / "j"), "otro.dat", b"C")
+    c = Carpeta(str(tmp_path / "j"))
+    assert c.nombres() == ["otro.dat", "scn/a.txt", "scn/sub/b.TXT"] and c.buscar("scn/*.txt") == ["scn/a.txt", "scn/sub/b.TXT"]
+    assert c.leer("scn/sub/b.TXT") == b"B" and "otro.dat" in c
+    with zipfile.ZipFile(tmp_path / "z.zip", "w") as z:
+        z.writestr("d/x.txt", "x")
+    assert Zip(str(tmp_path / "z.zip")).leer("d/x.txt") == b"x"
+    assert issubclass(Arc, Contenedor)
+
+
+def test_kit_tabla_de_cadenas():
+    from tl_organizer.motores.kit import TablaDeCadenas, reapuntar, verificar_operandos
+    from tl_organizer.motores.kit.cadenas import CadenasError
+    t = TablaDeCadenas(b"uno\0dos\0", inicio=100)
+    assert t.cadena_en(104) == b"dos" and t.agregar(b"tres") == 108 and t.agregar(b"tres") == 108 and t.agregar(b"x") == 113
+    assert t.bytes() == b"uno\0dos\0tres\0x\0"
+    with pytest.raises(CadenasError):
+        t.agregar(b"a\0b")
+    orig = struct.pack("<III", 1, 100, 7)
+    nuevo = reapuntar(orig, {4: 108}) + b"tres\0"
+    verificar_operandos(orig, nuevo, [4])
+    with pytest.raises(CadenasError, match="0x8"):
+        verificar_operandos(orig, reapuntar(orig, {8: 9}), [4])
+
+
+def _arc(entradas):
+    """Un BURIKO ARC20 con las entradas [(nombre, bytes)]."""
+    tabla, datos = b"", b""
+    for nombre, d in entradas:
+        tabla += nombre.encode().ljust(0x60, b"\0") + struct.pack("<II", len(datos), len(d)) + b"\0" * 0x18
+        datos += d
+    return b"BURIKO ARC20" + struct.pack("<I", len(entradas)) + tabla + datos
+
+
+@pytest.mark.parametrize("utf8", [True, False])
+def test_contrato_motor_bgi(tmp_path, utf8):
+    from tl_organizer.motores import contrato
+    from tl_organizer.motores.bgi import MotorBGI
+    from tl_organizer.nucleo import perfiles
+    juego = tmp_path / "juego"
+    juego.mkdir()
+    (juego / "data01.arc").write_bytes(_arc([("esc1", _escenario_con_textos(["一つ目", "二つ目", "三つ目", "四つ目"])),
+                                              ("esc2", _escenario_con_textos(["いち", "に", "さん"]))]))
+    m = MotorBGI(perfiles.Perfil({"id": "x", "nombre": "x", "motor": "bgi"}))      # sin ejecutable: no se parchea exe
+    assert contrato.verificar(m, str(juego), str(tmp_path / "t"), traduccion=lambda f: "¡Traducción!",
+                              opciones={"utf8": utf8}) == []
+
+
+class MotorJuguete(__import__("tl_organizer.motores.kit", fromlist=["MotorTextoPlano"]).MotorTextoPlano):
+    """Un formato de texto inventado: 【nombre】「diálogo」, narración suelta, @opcion texto, ; comentario."""
+    nombre = "juguete"
+    archivos = ("scn/*.txt",)
+    codificaciones = ("cp932",)
+    patrones = {
+        "nombre": r"^【(?P<texto>[^】]+)】",
+        "mensaje": r"^(?:【[^】]+】)?「(?P<texto>[^」]*)」",
+        "narracion": r"^(?P<texto>[^【「@;\s][^\n]*)$",
+        "opcion": r"^@opcion (?P<texto>.+)$",
+    }
+    ignorar = r"^\s*;"
+    salto_de_linea = "[r]"
+    marcador = r"\[[a-z]+\]"
+
+
+def _juego_juguete(tmp_path):
+    from tl_organizer.motores.kit import escribir_suelto
+    j = tmp_path / "juego"
+    escribir_suelto(str(j), "scn/uno.txt", "; comentario 「no」\n【太郎】「こんにちは[r]元気？」\n空が青い。\n@opcion はい\n@opcion いいえ\n".encode("cp932"))
+    escribir_suelto(str(j), "scn/dos.txt", "「さようなら」\n風が吹く。\n@opcion また\n".encode("cp932"))
+    return j
+
+
+def test_motor_texto_plano_extrae_y_cumple_el_contrato(tmp_path):
+    from tl_organizer.motores import contrato
+    from tl_organizer.nucleo import perfiles
+    m = MotorJuguete(perfiles.Perfil({"id": "x", "nombre": "x", "motor": "juguete"}))
+    j = _juego_juguete(tmp_path)
+    datos = {esc: filas for _g, esc, filas in m.textos(str(j))}
+    assert [(f["tipo"], f["original"]) for f in datos["scn/uno"]] == [
+        ("nombre", "太郎"), ("mensaje", "こんにちは\n元気？"), ("narracion", "空が青い。"), ("opcion", "はい"), ("opcion", "いいえ")]
+    assert datos["scn/uno"][0]["clave"] == "scn/uno:00001"
+    assert contrato.verificar(m, str(j), str(tmp_path / "t"), traduccion=lambda f: "Hola\nque tal") == []
+    # un salto de línea se escribe como [r]; un carácter que cp932 no tiene es un error de esa fila
+    filas = {esc: [dict(f) for f in fs] for esc, fs in datos.items()}
+    filas["scn/uno"][1].update(traduccion="Hola\ntodo bien?", estado="traducido")
+    filas["scn/uno"][2].update(traduccion="Precio: 5 €", estado="traducido")
+    rep = m.construir(str(j), str(tmp_path / "s"), filas, log=lambda *a: None)["texto"]
+    assert rep["cambiadas"] == 1 and [k for k, _ in rep["errores"]] == ["scn/uno:00003"]
+    assert "【太郎】「Hola[r]todo bien?」" in (tmp_path / "s" / "scn" / "uno.txt").read_bytes().decode("cp932")
+    assert m.caracteres_invalidos("a\nb") == [] and m.marcadores("a[r]b[p]") == ["[r]", "[p]"]
+
+
+def test_motor_texto_plano_opciones_del_perfil(tmp_path):
+    from tl_organizer.nucleo import perfiles
+    m = MotorJuguete(perfiles.Perfil({"id": "x", "nombre": "x", "motor": "juguete",
+                                      "juguete": {"codificacion_salida": "utf-8", "carpeta_salida": "parche"}}))
+    j = _juego_juguete(tmp_path)
+    filas = {esc: fs for _g, esc, fs in m.textos(str(j))}
+    filas["scn/dos"][0].update(traduccion="Adiós, señor", estado="traducido")
+    m.construir(str(j), str(tmp_path / "s"), filas, log=lambda *a: None)
+    assert (tmp_path / "s" / "parche" / "scn" / "dos.txt").read_text(encoding="utf-8").startswith("「Adiós, señor」")
+    assert m.caracteres_invalidos("5 €") == [] and MotorJuguete(perfiles.Perfil(
+        {"id": "x", "nombre": "x", "motor": "juguete", "juguete": {"codificacion_salida": "cp932"}})).caracteres_invalidos("5 €") == ["€"]
+
+
+HERRAMIENTA = r'''
+import json, os, sys
+cmd = sys.argv[1]
+if cmd == "extraer":
+    juego, dest = sys.argv[2:4]
+    for f in sorted(os.listdir(juego)):
+        if f.endswith(".txt"):
+            lineas = open(os.path.join(juego, f), encoding="utf-8").read().splitlines()
+            json.dump([{"texto": l} for l in lineas], open(os.path.join(dest, f[:-4] + ".json"), "w", encoding="utf-8"))
+elif cmd == "insertar":
+    juego, src, salida = sys.argv[2:5]
+    for f in sorted(os.listdir(src)):
+        d = json.load(open(os.path.join(src, f), encoding="utf-8"))
+        open(os.path.join(salida, f[:-5] + ".txt"), "w", encoding="utf-8").write("\n".join(x.get("traduccion") or x["texto"] for x in d) + "\n")
+else:
+    print("comando desconocido", file=sys.stderr); sys.exit(3)
+'''
+
+
+class MotorHerramienta(__import__("tl_organizer.motores.kit", fromlist=["MotorExterno"]).MotorExterno):
+    """Envuelve una «herramienta externa» de prueba (un script de Python) que extrae a JSON e inserta desde JSON."""
+    nombre = "herramienta"
+
+    def comando_extraer(self, juego, carpeta):
+        return ["extraer", juego, carpeta]
+
+    def leer_extraido(self, carpeta):
+        import json
+        from tl_organizer.nucleo import hojas
+        for f in sorted(os.listdir(carpeta)):
+            esc = f[:-5]
+            filas = [dict(clave=f"{esc}:{n:05d}", tipo="mensaje", original=x["texto"], traduccion="", estado="sin traducir",
+                          nota="", pos=n, hash=hojas.jp_hash(x["texto"].encode()))
+                     for n, x in enumerate(json.load(open(os.path.join(carpeta, f), encoding="utf-8")), 1)]
+            yield "textos", esc, filas
+
+    def escribir_para_insertar(self, carpeta, filas_del_juego, traducciones):
+        import json
+        for esc, fs in filas_del_juego.items():
+            json.dump([{"texto": f["original"], "traduccion": traducciones.get(f["clave"])} for f in fs],
+                      open(os.path.join(carpeta, esc + ".json"), "w", encoding="utf-8"))
+
+    def comando_insertar(self, juego, carpeta, salida):
+        return ["insertar", juego, carpeta, salida]
+
+    def releer(self, juego, salida):
+        import shutil
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            for f in os.listdir(juego):
+                shutil.copy(os.path.join(salida, f) if os.path.exists(os.path.join(salida, f)) else os.path.join(juego, f), tmp)
+            yield from self.textos(tmp)
+
+
+def test_motor_externo_envuelve_una_herramienta(tmp_path):
+    import sys as _sys
+    from tl_organizer.motores import MotorError, contrato
+    from tl_organizer.nucleo import perfiles
+    script = tmp_path / "herramienta.py"
+    script.write_text(HERRAMIENTA, encoding="utf-8")
+    j = tmp_path / "juego"
+    j.mkdir()
+    (j / "a.txt").write_text("uno\ndos\ntres\n", encoding="utf-8")
+    (j / "b.txt").write_text("cuatro\n", encoding="utf-8")
+    perfil = perfiles.Perfil({"id": "x", "nombre": "x", "motor": "herramienta",
+                              "herramienta": {"programa": [_sys.executable, str(script)], "lanzador": []}})
+    m = MotorHerramienta(perfil)
+    assert contrato.verificar(m, str(j), str(tmp_path / "t")) == []
+    # sin programa, o con uno que falla: errores claros
+    with pytest.raises(MotorError, match="no encuentro"):
+        MotorHerramienta(perfiles.Perfil({"id": "x", "nombre": "x", "motor": "herramienta",
+                                          "herramienta": {"programa": "no-existe-este-programa"}})).ejecutable()
+    with pytest.raises(MotorError, match="terminó con error 3"):
+        m.ejecutar(["otra-cosa"])
