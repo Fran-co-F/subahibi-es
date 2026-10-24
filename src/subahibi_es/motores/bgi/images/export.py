@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Exporta las imágenes de interfaz de los .arc del juego a PNG."""
 import os
-from ..bgi.arc import Arc
-from ..bgi import dsc, image
+from ..arc import Arc
+from .. import dsc, image
 
 
 def export_arc(arc_path, out_dir, log=print):

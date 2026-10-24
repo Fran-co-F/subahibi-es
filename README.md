@@ -189,8 +189,9 @@ subahibi-es text wrap [HOJAS…] --max-caracteres N [--max-lineas M] [--ancho PX
 La variable de entorno `SUBAHIBI_ES_PROJECT=/ruta/al/juego` fuerza qué proyecto usar (si no, se busca `subahibi-es.json` desde la carpeta actual hacia arriba).
 `build --fuente NOMBRE` y `patch-exe --fuente NOMBRE` cambian la fuente que usa el juego (ASCII, hasta 15 caracteres; instalada en el sistema).
 
-**`patch-exe`** solo parchea un `BGI.exe` cuyo sha256 corresponde a una versión conocida (hoy, 1.685.3 x86-64). Cambios, todos documentados en `exe_patch.py`:
-1. **Fuente:** las dos cadenas `MS Gothic` (inglés y japonés) pasan a `--fuente` (por defecto `SubaHibi07Inq`).
+**`patch-exe`** solo parchea un `BGI.exe` cuyo sha256 corresponde a una versión conocida (hoy, 1.685.3 x86-64). Las versiones conocidas y sus direcciones están en el perfil del juego
+(`[[bgi.ejecutables]]` en `motores/bgi/juegos/subahibi-15th.toml`; ver [Perfiles de juego y motores](#perfiles-de-juego-y-motores)). Cambios, todos documentados en `motores/bgi/exe_patch.py`:
+1. **Fuente:** las dos cadenas `MS Gothic` (inglés y japonés) pasan a `--fuente` (por defecto, la del perfil: `SubaHibi07Inq`).
 2. **Modo proporcional:** `WindowSetFont` recibe siempre `proporcional = 1` (si no, el texto sale monoespaciado y el «...» se parte).
 3. **Modo UTF-8:** el punto de entrada pasa por un desvío que llama a `Text_SetEncoding(1)` antes de arrancar.
 
@@ -237,15 +238,30 @@ equivocada sale como basura. Así los acentos son letras normales de la fuente, 
 - Las entradas de `sysgrp.arc` son DSC (`DSC FORMAT 1.00`) más una cabecera de 16 bytes y píxeles BGRA.
 - Un escenario compilado (`BurikoCompiledScriptVer1.00`) es una cabecera, un flujo de palabras de 32 bits (algunas con operandos) y una tabla de cadenas; los operandos de cadena son desplazamientos
   desde el inicio del flujo. Por eso se reimporta sin reubicar nada: las cadenas nuevas van al final y solo cambia el operando de cada texto.
-- `text/accents.py` (`á`=`ｧ`, `í`=`ｨ`, `ú`=`ｩ`, `é`=`ｪ`, `ó`=`ｫ`, `ü`=`ｯ`, `Á É Í Ó Ú`=`ｱ ｴ ｲ ｵ ｳ`, `Ü`=`ﾂ`, `ñ`=`ﾃ`, `Ñ`=`ﾆ`, `¡`=`ｷ`, `¿`=`ﾚ`) solo hace falta para **leer** la traducción vieja,
+- `motores/bgi/text/accents.py` (`á`=`ｧ`, `í`=`ｨ`, `ú`=`ｩ`, `é`=`ｪ`, `ó`=`ｫ`, `ü`=`ｯ`, `Á É Í Ó Ú`=`ｱ ｴ ｲ ｵ ｳ`, `Ü`=`ﾂ`, `ñ`=`ﾃ`, `Ñ`=`ﾆ`, `¡`=`ｷ`, `¿`=`ﾚ`) solo hace falta para **leer** la traducción vieja,
   que guardaba las tildes como katakana de ancho medio que una fuente especial dibujaba como letras (verificado con sus 146.196 cadenas, ida y vuelta exacta).
+
+## Perfiles de juego y motores
+
+La herramienta se está generalizando para cualquier novela visual (plan completo en [`docs/PLAN.md`](docs/PLAN.md)). Hoy ya está separada en:
+
+- **El núcleo** (`nucleo/`): proyecto, `exportar`/`build`/`estado`/`instalar`, hojas, `wrap`, galería. No conoce ningún formato.
+- **Los motores** (`motores/`): código que entiende los formatos de una familia de juegos. Hoy, `bgi` (Ethornell). Un motor es una subclase de
+  `motores.base.Motor` que declara sus *capacidades* (`texto`, `imagenes`, `ejecutable`, `parche_viejo`); un paquete aparte puede agregar el suyo con un
+  entry point en el grupo `subahibi_es.motores`.
+- **Los perfiles de juego**: un archivo TOML por juego con el motor, cómo reconocerlo, qué archivos tocar y las opciones del motor
+  (por ejemplo [`motores/bgi/juegos/subahibi-15th.toml`](src/subahibi_es/motores/bgi/juegos/subahibi-15th.toml)). `init` prueba todos los perfiles y usa el que coincide.
+  Se buscan en las carpetas de `SUBAHIBI_ES_PERFILES`, en `~/.config/subahibi-es/juegos/` (Windows: `%APPDATA%\subahibi-es\juegos\`) y en los incluidos en cada motor;
+  un perfil propio con el mismo `id` reemplaza al incluido. Así, otra versión del exe o otro juego BGI se soporta escribiendo un TOML, sin tocar código.
 
 ## Estructura y pruebas
 
 ```
-src/subahibi_es/   cli.py, project.py, workflow.py, build.py, config.py, oldpatch.py, exe_patch.py,
-                   bgi/ (arc, dsc, image, scn), images/ (export, index, import_, ocr, _page),
-                   text/ (extract, export, import_, sheet, align, accents, wrap)
+src/subahibi_es/   cli.py
+  nucleo/          proyecto, flujo, config, perfiles, texto, hojas, wrap, alineacion, enlaces, imagenes, galeria/ (index, _page, ocr)
+  motores/         base (interfaz Motor), __init__ (registro)
+    bgi/           arc, dsc, image, scn, exe_patch, oldpatch, build, cli, text/ (extract, export, import_, accents, align),
+                   images/ (export, import_), juegos/ (perfiles TOML)
 tests/             pytest (datos sintéticos; con GAME_DIR=… también contra el juego real); tests/web/ prueba la galería con jsdom
 ```
 `pip install -e ".[texto,dev]"` y `pytest`. GitHub Actions corre las pruebas en Linux, Windows y macOS.

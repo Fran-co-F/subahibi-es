@@ -7,7 +7,7 @@ carpeta raíz).  Los de Script/CVTD son escenarios (para precargar el español) 
 import os
 import re
 import zipfile
-from .bgi import scn
+from . import scn
 
 LOOSE = re.compile(r"(?:^|/)(Script|Graphic|Sound|Voice)/CVTD/([^/]+)$")
 

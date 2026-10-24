@@ -6,8 +6,9 @@ El motor da prioridad a los archivos sueltos sobre los .arc; el archivo suelto e
 """
 import os
 from PIL import Image
-from ..bgi.arc import Arc
-from ..bgi import dsc, image
+from ..arc import Arc
+from .. import dsc, image
+from ....nucleo.imagenes import open_any
 
 LOOSE_DIR = os.path.join("Graphic", "CVTD")        # ruta fijada por los programas del juego (system.arc:ipl._bp)
 EXTS = (".png", ".bmp")
@@ -43,7 +44,7 @@ def import_images(src_dir, arcs, out_game_dir, log=print):
     for name, path in files.items():
         if name not in ref:
             errs.append((name, "no existe como imagen en los .arc indicados (nombre mal escrito)")); continue
-        im = image.open_any(path)
+        im = open_any(path)
         if im.size != ref[name]:
             errs.append((name, f"tamaño {im.size[0]}x{im.size[1]} distinto del original {ref[name][0]}x{ref[name][1]}")); continue
         if path.lower().endswith(".png"):           # los BMP de 32 bits se leen con su alfa tal cual

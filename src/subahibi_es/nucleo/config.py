@@ -1,10 +1,12 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Valores por defecto de los comandos, derivados del proyecto (ver project.py).
+"""Valores por defecto de los comandos, derivados del proyecto (ver proyecto.py).
 
 Los argumentos de la línea de comandos siempre mandan sobre estos valores.  Claves: juego, juego_es, parche_viejo,
 imagenes, texto, originales, indice, estado.
 """
-from . import project
+import sys
+
+from . import proyecto as project
 
 
 def load():
@@ -21,3 +23,16 @@ def load():
         "indice": proj.dir("indice"),
         "estado": proj.estado_tsv,
     }
+
+
+def need(value, key, what):
+    """Argumento de la línea de comandos o, si falta, el valor del proyecto."""
+    v = value or load().get(key)
+    if not v:
+        sys.exit(f"falta {what}: indicalo, o ejecutá «subahibi-es init» dentro de la carpeta de instalación del juego")
+    return v
+
+
+def lista(texto):
+    """«a, b,c» -> ("a", "b", "c")"""
+    return tuple(x.strip() for x in texto.split(","))

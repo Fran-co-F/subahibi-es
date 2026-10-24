@@ -1,19 +1,31 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Exporta el texto de los escenarios del juego a hojas de traducción."""
+"""Saca las filas de texto de los escenarios del juego (las hojas las escribe nucleo/texto.py)."""
 import glob
 import os
-from ..bgi.arc import Arc
-from ..bgi import dsc, scn
-from . import accents, align, extract, sheet
+from ..arc import Arc
+from .. import dsc, scn
+from ....nucleo import alineacion, hojas
+from . import accents, align, extract
 
 MAX_COMPRESSED = 2_000_000       # los escenarios son chicos; evita descomprimir imágenes enormes
+DATA_ARCS = ("data0*.arc",)      # dónde están los escenarios si el perfil no dice otra cosa ([texto] archivos)
 
 
-def scenarios(game_dir, arcs=None):
+def arc_paths(game_dir, arcs=None, patrones=DATA_ARCS):
+    """Rutas de los .arc: los nombrados en 'arcs' (con o sin .arc) o, si no, los que coinciden con 'patrones'."""
+    if arcs:
+        return [os.path.join(game_dir, a if a.endswith(".arc") else a + ".arc") for a in arcs]
+    out = []
+    for pat in patrones:
+        for p in sorted(glob.glob(os.path.join(game_dir, pat))):
+            if p not in out:
+                out.append(p)
+    return out
+
+
+def scenarios(game_dir, arcs=None, patrones=DATA_ARCS):
     """Genera (nombre_arc, nombre_script, bytes) de los escenarios de los .arc del juego."""
-    paths = ([os.path.join(game_dir, a if a.endswith(".arc") else a + ".arc") for a in arcs]
-             if arcs else sorted(glob.glob(os.path.join(game_dir, "data0*.arc"))))
-    for p in paths:
+    for p in arc_paths(game_dir, arcs, patrones):
         arc = Arc(p)
         for e in arc.entries:
             if e.size > MAX_COMPRESSED:
@@ -59,30 +71,12 @@ def script_rows(name, jp_bytes, old_bytes=None):
             # el parche viejo termina muchas líneas con un TAB que el original no tiene: es invisible en la hoja y no aporta nada
             es, st = accents.decode(re_[mapping[i]].raw).rstrip("\t"), "del parche"
         out.append(dict(clave=f"{name}:{n:05d}", tipo=r.kind, japones=r.raw.decode("cp932", "replace"),
-                        espanol=es, estado=st, nota="", pos=r.pos, hash=sheet.jp_hash(r.raw)))
-    pairs = [k for k, r in enumerate(out) if r["tipo"] == "mensaje" and r["espanol"]]
-    for k in align.doubtful([len(out[k]["japones"]) for k in pairs], [len(out[k]["espanol"]) for k in pairs]):
-        out[pairs[k]]["estado"], out[pairs[k]]["nota"] = "revisar", "alineación dudosa: el largo no se parece al del original"
-    return out
+                        espanol=es, estado=st, nota="", pos=r.pos, hash=hojas.jp_hash(r.raw)))
+    return alineacion.marcar_dudosas(out)
 
 
-def export_text(game_dir, out_dir, arcs=None, old=None, tsv=False, xlsx=True, log=print):
-    os.makedirs(out_dir, exist_ok=True)
+def textos(game_dir, old=None, arcs=None, patrones=DATA_ARCS):
+    """Genera (nombre_arc, nombre_script, filas) para cada escenario (ver Motor.textos)."""
     olds = load_old(old) if old else {}
-    by_arc, total, prefilled, sin_texto = {}, 0, 0, []
-    for arc, name, data in scenarios(game_dir, arcs):
-        rows = script_rows(name, data, olds.get(name))
-        if not rows:                      # guiones de configuración o de finales: no hay nada que traducir
-            sin_texto.append(name)
-            continue
-        by_arc.setdefault(arc, {})[sheet.safe_name(name)] = rows
-        total += len(rows)
-        prefilled += sum(1 for r in rows if r["estado"] != "sin traducir")
-        if tsv:
-            os.makedirs(os.path.join(out_dir, "tsv"), exist_ok=True)
-            sheet.write_tsv(os.path.join(out_dir, "tsv", sheet.safe_name(name) + ".tsv"), rows)
-    if xlsx:
-        for arc, sheets in by_arc.items():
-            sheet.write_xlsx(os.path.join(out_dir, arc + ".xlsx"), sheets)
-    return dict(scripts=sum(len(v) for v in by_arc.values()), arcs=len(by_arc), filas=total, precargadas=prefilled,
-                sin_texto=sin_texto)
+    for arc, name, data in scenarios(game_dir, arcs, patrones):
+        yield arc, name, script_rows(name, data, olds.get(name))

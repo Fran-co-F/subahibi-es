@@ -4,36 +4,13 @@
 Flujo normal (dentro de la carpeta de instalación del juego):  init -> exportar -> (traducir) -> build -> instalar.
 """
 import argparse
-import glob
 import os
 import shutil
 import sys
 
-from . import config, exe_patch, project, workflow
-
-
-# ---------------------------------------------------------------- utilidades
-
-def _arc_paths(game, names):
-    out = []
-    for n in names:
-        p = n if os.path.isabs(n) else os.path.join(game, n if n.endswith(".arc") else n + ".arc")
-        if not os.path.exists(p):
-            sys.exit(f"no existe {p}")
-        out.append(p)
-    return out
-
-
-def need(value, key, what):
-    """Argumento de la línea de comandos o, si falta, el valor del proyecto (ver config.py)."""
-    v = value or config.load().get(key)
-    if not v:
-        sys.exit(f"falta {what}: indicalo, o ejecutá «subahibi-es init» dentro de la carpeta de instalación del juego")
-    return v
-
-
-def _estados(texto):
-    return tuple(x.strip() for x in texto.split(","))
+from . import motores
+from .nucleo import config, flujo as workflow, perfiles, proyecto as project
+from .nucleo.config import lista as _estados, need
 
 
 # ---------------------------------------------------------------- comandos del proyecto
@@ -44,10 +21,11 @@ def cmd_init(a):
         print(f"parche viejo actualizado: {proj.parche_viejo}")
         return 0
     print(f"proyecto creado en {proj.root}")
-    print(f"  juego detectado:    {proj.cfg['motor']}")
+    print(f"  juego detectado:    {proj.perfil.nombre}" + (f" ({proj.version})" if proj.version else ""))
     print(f"  carpeta de trabajo: {os.path.join(proj.root, project.WORK)}")
     print(f"  parche viejo:       {proj.parche_viejo or '(sin configurar; agregalo con «subahibi-es init --parche-viejo ARCHIVO.zip»)'}")
-    print("  copia del BGI.exe original guardada en la carpeta de trabajo (backup)")
+    if proj.perfil.ejecutable:
+        print(f"  copia del {proj.perfil.ejecutable} original guardada en la carpeta de trabajo (backup)")
     print("\nsiguiente paso:  subahibi-es exportar")
     return 0
 
@@ -68,26 +46,19 @@ def cmd_exportar(a):
 
 
 def cmd_build(a):
-    from . import build
     proj = project.require()
-    exe = proj.original_exe()
+    proj.original_exe()                        # antes de borrar nada: si no hay un exe original, avisa y no sigue
     out = a.salida or (proj.dir("jugable") if a.jugable else proj.dir("salida"))
     if not a.salida and not a.jugable and os.path.isdir(out):
         shutil.rmtree(out)                     # la carpeta «salida» es solo nuestra: se rehace entera
-    texto = proj.dir("texto") if glob.glob(os.path.join(proj.dir("texto"), "*.xlsx")) else None
-    imagenes = proj.dir("traducidas") if os.path.isdir(proj.dir("traducidas")) and os.listdir(proj.dir("traducidas")) else None
-    r = build.build(proj.root, out, proj.parche_viejo, texto, imagenes, _estados(a.estados), not a.sin_voz,
-                    not a.katakana, a.fuente, full=a.jugable, exe=exe)
-    print(f"BGI.exe parcheado (fuente «{a.fuente}»" + (", modo UTF-8" if not a.katakana else ", modo katakana") + ")")
+    r = workflow.build(proj, out, _estados(a.estados), type(proj.motor).opciones_build(a), jugable=a.jugable)
     if a.jugable:
         mt = ", ".join(f"{v} por {k}" for k, v in r["metodos_enlace"].items())
         print(f"{r['enlaces']} archivos del juego enlazados ({mt})")
         if "copia" in r["metodos_enlace"]:
             print("aviso: se copiaron archivos porque no se pudo enlazar: ocupan espacio extra en disco "
                   "(en Windows, activá el modo desarrollador para usar enlaces simbólicos)")
-    if "sueltos" in r:
-        print(f"{r['sueltos']} archivos sueltos del parche viejo ({r['omitidos_ui_vieja']} imágenes de la interfaz vieja omitidas)")
-    t = r["texto"]
+    t = r.get("texto")
     if t:
         for k, v in t["errores"][:20]:
             print("ERROR:", k, "-", v)
@@ -138,97 +109,22 @@ def cmd_reset(a):
 
 # ---------------------------------------------------------------- comandos sueltos (usan el proyecto como valor por defecto)
 
-def cmd_patch_exe(a):
-    with open(a.entrada, "rb") as f:
-        data = f.read()
-    h, b = exe_patch.identify(data)
-    if a.verify:
-        print(f"sha256 {h}")
-        print("versión:", b["version"] if b else "desconocida")
-        print("parcheado:", "sí" if exe_patch.is_patched(data) else "no")
-        return 0 if b else 1
-    try:
-        out = exe_patch.patch(data, font=not a.sin_fuente, proportional=not a.sin_proporcional,
-                              utf8=not a.katakana, font_name=a.fuente)
-    except exe_patch.PatchError as e:
-        sys.exit(f"error: {e}")
-    if a.dry_run:
-        print("ok (no se escribió nada):", b["version"])
-        return 0
-    with open(a.salida, "wb") as f:
-        f.write(out)
-    print("escrito", a.salida, "sha256", exe_patch.sha256(out))
-    return 0
-
-
-def cmd_images_export(a):
-    from .images import export
-    juego = need(a.juego, "juego", "la carpeta del juego")
-    salida = need(a.salida, "originales", "la carpeta de salida")
-    total = 0
-    for p in _arc_paths(juego, a.arc):
-        n, skipped = export.export_arc(p, salida)
-        total += n
-        print(f"{os.path.basename(p)}: {n} imágenes exportadas, {len(skipped)} omitidas")
-        for name, why in skipped[:5]:
-            print("   omitida:", name, "-", why)
-    print("total:", total, "->", salida)
-    return 0
-
-
 def cmd_images_index(a):
-    from .images import index
+    from .nucleo.galeria import index
+    proj = project.find()
     salida = need(a.salida, "indice", "la carpeta de salida")
     cnt = index.build(need(a.originales, "originales", "la carpeta de PNG originales"),
                       need(a.traducidas, "imagenes", "la carpeta de imágenes traducidas"), salida,
-                      a.estado or config.load().get("estado"), a.ocr)
+                      a.estado or config.load().get("estado"), a.ocr,
+                      pantallas=proj.perfil.seccion("galeria").get("pantallas") if proj else None)
     for k, v in sorted(cnt.items()):
         print(f"{k:15} {v}")
     print("índice:", os.path.join(salida, "index.html"))
     return 0
 
 
-def cmd_images_import(a):
-    from .images import import_
-    juego = need(a.juego, "juego", "la carpeta del juego")
-    salida = need(a.salida, "juego_es", "la carpeta de salida")
-    placed, warns, errs = import_.import_images(need(a.origen, "imagenes", "la carpeta de imágenes traducidas"),
-                                                _arc_paths(juego, a.arc), salida)
-    for n, w in warns:
-        print("aviso:", n, "-", w)
-    for n, e in errs:
-        print("ERROR:", n, "-", e)
-    print(f"{len(placed)} colocadas en {os.path.join(salida, import_.LOOSE_DIR)}; {len(errs)} con error")
-    return 1 if errs else 0
-
-
-def cmd_text_export(a):
-    from .text import export
-    cfg = config.load()
-    juego = need(a.juego, "juego", "la carpeta del juego")
-    salida = a.salida or cfg.get("texto") or "texto"
-    r = export.export_text(juego, salida, a.arc, a.parche_viejo or cfg.get("parche_viejo"), tsv=a.tsv, xlsx=not a.sin_xlsx)
-    print(f"{r['scripts']} escenarios en {r['arcs']} .arc -> {r['filas']} filas "
-          f"({r['precargadas']} precargadas desde la traducción vieja) en {salida}; "
-          f"{len(r['sin_texto'])} escenarios sin texto no tienen hoja")
-    return 0
-
-
-def cmd_text_import(a):
-    from .text import import_
-    r = import_.import_text(need(a.juego, "juego", "la carpeta del juego"), a.hojas or [need(None, "texto", "las hojas")],
-                            need(a.salida, "juego_es", "la carpeta de salida"), _estados(a.estados), not a.katakana)
-    for k, v in r["errores"][:30]:
-        print("ERROR:", k, "-", v)
-    if len(r["errores"]) > 30:
-        print(f"... y {len(r['errores']) - 30} errores más")
-    print(f"{r['scripts']} escenarios escritos, {r['cambiadas']} textos cambiados, "
-          f"{r['omitidas']} filas omitidas por su estado, {len(r['errores'])} errores")
-    return 1 if r["errores"] else 0
-
-
 def cmd_text_wrap(a):
-    from .text import sheet, wrap
+    from .nucleo import hojas as sheet, wrap
     if not (a.max_caracteres or a.ancho):
         sys.exit("indicá --max-caracteres N y/o --ancho PX (con --fuente y --tamano)")
     fits = wrap.make_fits(a.max_caracteres, a.ancho, a.fuente, a.tamano)
@@ -285,13 +181,13 @@ def _parser():
     p.add_argument("--ocr", action="store_true", help="la galería usa OCR (Tesseract) como pista de qué imágenes tienen japonés")
     p.set_defaults(f=cmd_exportar)
 
+    clases = [cls for _n, cls in motores.clases()]
     p = sub.add_parser("build", help="crea en «salida» lo que hay que copiar al juego")
     p.add_argument("--estados", default="traducido,del parche", help="estados que se aplican (por defecto traducido,del parche; agregá «revisar» para probar todo)")
-    p.add_argument("--sin-voz", action="store_true", help="no incluir Voice/CVTD del parche viejo")
-    p.add_argument("--katakana", action="store_true", help="modo antiguo: sin UTF-8, acentos como katakana de ancho medio")
-    p.add_argument("--fuente", default=exe_patch.DEFAULT_FONT, metavar="NOMBRE", help="nombre de la fuente del juego (ASCII, hasta 15 caracteres; debe estar instalada)")
     p.add_argument("--jugable", action="store_true", help="arma una carpeta de prueba con enlaces a los archivos del juego, para ejecutarla sin tocar la instalación")
     p.add_argument("--salida", metavar="CARPETA", help="otra carpeta de salida (no se borra)")
+    for cls in clases:
+        cls.argumentos_build(p)                # opciones propias de cada motor
     p.set_defaults(f=cmd_build)
 
     p = sub.add_parser("instalar", help="copia «salida» sobre el juego (guarda copia de lo que pisa)")
@@ -305,43 +201,12 @@ def _parser():
     p.add_argument("--forzar", action="store_true", help="aunque el parche esté instalado")
     p.set_defaults(f=cmd_reset)
 
-    p = sub.add_parser("patch-exe", help="(suelto) parchea una copia de BGI.exe")
-    p.add_argument("entrada"); p.add_argument("salida", nargs="?")
-    p.add_argument("--verify", action="store_true", help="solo informa versión y si ya está parcheado")
-    p.add_argument("--dry-run", action="store_true"); p.add_argument("--sin-fuente", action="store_true")
-    p.add_argument("--sin-proporcional", action="store_true")
-    p.add_argument("--katakana", action="store_true", help="modo antiguo: sin UTF-8, acentos como katakana de ancho medio")
-    p.add_argument("--fuente", default=exe_patch.DEFAULT_FONT, metavar="NOMBRE", help="nombre de la fuente (ASCII, hasta 15 caracteres; debe estar instalada)")
-    p.set_defaults(f=cmd_patch_exe)
-
     im = sub.add_parser("images", help="(suelto) imágenes de interfaz").add_subparsers(dest="sub", required=True, metavar="subcomando")
-    p = im.add_parser("export", help="exporta los .arc a PNG")
-    p.add_argument("juego", nargs="?"); p.add_argument("salida", nargs="?"); p.add_argument("--arc", nargs="+", default=["sysgrp"])
-    p.set_defaults(f=cmd_images_export)
     p = im.add_parser("index", help="índice HTML/CSV: original vs traducida y qué falta")
     p.add_argument("originales", nargs="?"); p.add_argument("traducidas", nargs="?"); p.add_argument("salida", nargs="?")
     p.add_argument("--estado", help="TSV de decisiones manuales"); p.add_argument("--ocr", action="store_true")
     p.set_defaults(f=cmd_images_index)
-    p = im.add_parser("import", help="coloca imágenes traducidas en Graphic/CVTD")
-    p.add_argument("origen", nargs="?"); p.add_argument("juego", nargs="?"); p.add_argument("salida", nargs="?")
-    p.add_argument("--arc", nargs="+", default=["sysgrp"]); p.set_defaults(f=cmd_images_import)
-
     tx = sub.add_parser("text", help="(suelto) texto de los escenarios").add_subparsers(dest="sub", required=True, metavar="subcomando")
-    p = tx.add_parser("export", help="exporta el texto a hojas XLSX (una por .arc, una hoja por script)")
-    p.add_argument("juego", nargs="?"); p.add_argument("salida", nargs="?", help="por defecto, la carpeta «texto» del proyecto")
-    p.add_argument("--arc", nargs="+", help="solo estos .arc (por defecto, todos los data0*.arc)")
-    p.add_argument("--parche-viejo", metavar="ZIP_O_CARPETA", help="traducción vieja: precarga el español; por defecto, la del proyecto")
-    p.add_argument("--tsv", action="store_true", help="además, un TSV por script (para git/diff)")
-    p.add_argument("--sin-xlsx", action="store_true"); p.set_defaults(f=cmd_text_export)
-
-    p = tx.add_parser("import", help="arma los escenarios del juego con el español de las hojas")
-    p.add_argument("juego", nargs="?"); p.add_argument("salida", nargs="?", help="carpeta donde escribe Script/CVTD/")
-    p.add_argument("hojas", nargs="*", help=".xlsx / .tsv o carpetas con ellos (por defecto, la carpeta «texto» del proyecto)")
-    p.add_argument("--estados", default="traducido,del parche",
-                   help="estados que se aplican (por defecto: traducido,del parche; agregar 'revisar' para probar todo)")
-    p.add_argument("--katakana", action="store_true", help="modo antiguo: sin UTF-8, acentos como katakana de ancho medio")
-    p.set_defaults(f=cmd_text_import)
-
     p = tx.add_parser("wrap", help="inserta saltos de línea manuales en las hojas, cortando en límites de palabra")
     p.add_argument("hojas", nargs="*", help=".xlsx / .tsv o carpetas (por defecto, la carpeta «texto» del proyecto)")
     p.add_argument("--max-caracteres", type=int, metavar="N", help="largo máximo de línea en caracteres")
@@ -352,6 +217,9 @@ def _parser():
     p.add_argument("--reflow", action="store_true", help="primero descarta los saltos manuales existentes y vuelve a cortar")
     p.add_argument("--salida", metavar="CARPETA", help="escribir las hojas nuevas acá (por defecto, en el lugar con copia .bak)")
     p.add_argument("--sin-copia", action="store_true"); p.set_defaults(f=cmd_text_wrap)
+
+    for cls in clases:
+        cls.registrar_comandos(sub, {"images": im, "text": tx})     # comandos sueltos de cada motor
     return ap
 
 
@@ -361,11 +229,9 @@ def main(argv=None):
             stream.reconfigure(errors="replace")       # consolas de Windows con otra página de códigos
     ap = _parser()
     a = ap.parse_args(argv)
-    if a.cmd == "patch-exe" and not a.verify and not a.dry_run and not a.salida:
-        ap.error("patch-exe necesita 'salida' (o --verify / --dry-run)")
     try:
         return a.f(a)
-    except project.ProjectError as e:
+    except (project.ProjectError, perfiles.PerfilError, motores.MotorError) as e:
         sys.exit(f"error: {e}")
 
 

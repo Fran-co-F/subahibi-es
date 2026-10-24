@@ -5,7 +5,7 @@ Un texto es una cadena (token 'str') que consume un comando de texto.  El comand
 el primer token que no sea push / str / marca de línea después de ella.
 """
 from dataclasses import dataclass
-from ..bgi.scn import TOK_STR
+from ..scn import TOK_STR
 
 # comando -> tipo (observado en los 130 escenarios de la 15th Anniversary)
 KINDS = {

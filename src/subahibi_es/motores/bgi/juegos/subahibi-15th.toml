@@ -1,0 +1,63 @@
+# Perfil de juego: Subarashiki Hibi 15th Anniversary (Ethornell / BGI v1.685.3).
+# Formato de los perfiles: src/subahibi_es/nucleo/perfiles.py y docs/PLAN.md (sección 1.4).
+id = "subahibi-15th"
+nombre = "Subarashiki Hibi 15th Anniversary"
+motor = "bgi"
+
+[deteccion]
+# Es el juego si están todos estos archivos y el ejecutable es una versión conocida (ver [[bgi.ejecutables]]).
+requeridos = ["BGI.exe", "sysgrp.arc", "sysprg.arc", "system.arc", "data01101.arc"]
+ejecutable = "BGI.exe"          # init guarda una copia del original
+
+[texto]
+archivos = ["data0*.arc"]       # .arc con escenarios
+
+[imagenes]
+archivos = ["sysgrp.arc"]       # .arc con las imágenes de interfaz
+
+[galeria.pantallas]             # prefijo del nombre de la imagen -> pantalla (columna «pantalla» de estado.csv)
+SGTitle = "Pantalla de título"
+SGMenu = "Menú dentro del juego"
+SGDialog = "Diálogos"
+SGCnfgWnd = "Configuración"
+SGKeyCnfg = "Configuración de teclas"
+SGUsDtWnd = "Guardar / Cargar"
+SGScene = "Galería de escenas"
+SGScSlct = "Selector de escenas"
+SGMusic = "Galería de música"
+SGMsgWnd = "Ventana de mensajes"
+SGLogWnd = "Historial"
+SGCG = "Galería de CG"
+SGPrtcl = "Efectos"
+SGPrtclSkr = "Efectos"
+
+[jugable]                       # build --jugable: qué se enlaza del juego y qué se copia una sola vez
+enlazar_extensiones = [".arc", ".ico"]
+enlazar = ["BHVC.exe", "BGI.hvl"]
+copiar_una_vez = ["BGI.gdb", "UserData"]   # datos del jugador: no se pisan
+
+[bgi]
+fuente = "SubaHibi07Inq"        # la del parche viejo (ASCII, hasta 15 caracteres; tiene que estar instalada)
+
+# Direcciones del parche del exe (ver motores/bgi/exe_patch.py).  Soportar otra versión = agregar otro bloque.
+[[bgi.ejecutables]]
+sha256 = "993e9803a4335ff752dd7b4fd7b5036c3200c88c74fbde05d29b5123be5bd29c"
+version = "1.685.3 (15th Anniversary, x86_64)"
+text_va = 0x140001000           # sección .text: dirección virtual y desplazamiento en el archivo
+text_raw = 0x400
+# cadenas «MS Gothic» (inglés y japonés): desplazamiento en el archivo y contenido esperado en hexadecimal
+font = [
+    { offset = 0x17C740, original = "4d5320476f7468696300" },
+    { offset = 0x17C750, original = "826c827220835383568362834e00" },
+]
+# modo proporcional: desvío en WindowSetFont
+hook = 0x1400DF7FA
+hook_bytes = "89742428458bc4"
+cave = 0x1400DF76C
+back = 0x1400DF801
+# modo UTF-8: el punto de entrada pasa por un desvío que llama a Text_SetEncoding(1)
+entry_field = 0x150
+entry_rva = 0x11D74
+image_base = 0x140000000
+utf8_cave = 0x140001DF0
+set_encoding = 0x1400F74C0

@@ -5,11 +5,11 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "subahibi-es"
 version = "0.1.0"
-description = "Herramientas de traducción para Subarashiki Hibi 15th Anniversary (motor Ethornell/BGI)"
+description = "Herramientas de traducción de novelas visuales (motores como plugins; hoy: Ethornell/BGI, Subarashiki Hibi 15th Anniversary)"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "GPL-3.0-or-later" }
-dependencies = ["Pillow>=10"]
+dependencies = ["Pillow>=10", "tomli>=1.1; python_version < '3.11'"]
 
 [project.optional-dependencies]
 texto = ["openpyxl>=3.1"]
@@ -20,4 +20,7 @@ subahibi-es = "subahibi_es.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+"*" = ["juegos/*.toml"]          # perfiles de juego incluidos en cada motor
 

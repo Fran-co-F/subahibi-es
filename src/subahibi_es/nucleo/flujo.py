@@ -1,12 +1,16 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Las órdenes de alto nivel que trabajan sobre un proyecto (project.py): exportar, estado, instalar y desinstalar."""
+"""Las órdenes de alto nivel que trabajan sobre un proyecto (proyecto.py): exportar, estado, build, instalar y desinstalar.
+
+No conocen ningún formato: le piden al motor del proyecto (proj.motor) lo que haga falta, según sus capacidades.
+"""
 import datetime
 import glob
 import json
 import os
 import shutil
 
-from . import project as proj_mod
+from ..motores import base
+from . import proyecto as proj_mod
 
 
 def _stamp():
@@ -17,27 +21,35 @@ def exportar(proj, forzar=False, ocr=False, log=print):
     """Vuelca todo lo necesario para traducir: PNG de la interfaz, galería de imágenes y hojas de texto.
     Las hojas de texto que ya existen NO se pisan (hay trabajo de traducción adentro) salvo con forzar=True, y entonces
     se guarda una copia en backup/."""
-    from .images import export as img_export, index as img_index
-    from .text import export as txt_export
+    from .galeria import index as img_index
     game = proj.root
+    motor = proj.motor
     rep = {}
-    if not os.path.exists(proj.estado_tsv):                  # por si se borró para empezar de cero
-        os.makedirs(os.path.dirname(proj.estado_tsv), exist_ok=True)
-        with open(proj.estado_tsv, "w", encoding="utf-8", newline="\n") as f:
-            f.write(proj_mod.ESTADO_PLANTILLA)
-    # 1) PNG originales de la interfaz
-    orig = proj.dir("originales")
-    if forzar or not glob.glob(os.path.join(orig, "*.png")):
-        n, skipped = img_export.export_arc(os.path.join(game, "sysgrp.arc"), orig)
-        rep["imagenes_exportadas"] = n
-        log(f"imágenes de la interfaz: {n} PNG en {orig}")
-    else:
-        log("imágenes de la interfaz: ya estaban exportadas")
-    # 2) galería editable
-    cnt = img_index.build(orig, proj.dir("traducidas"), proj.dir("indice"), proj.estado_tsv, ocr)
-    rep["indice"] = dict(cnt)
-    log(f"galería de imágenes: {os.path.join(proj.dir('indice'), 'index.html')}")
-    # 3) hojas de texto
+    if base.IMAGENES in motor.capacidades:
+        if not os.path.exists(proj.estado_tsv):                  # por si se borró para empezar de cero
+            os.makedirs(os.path.dirname(proj.estado_tsv), exist_ok=True)
+            with open(proj.estado_tsv, "w", encoding="utf-8", newline="\n") as f:
+                f.write(proj_mod.ESTADO_PLANTILLA)
+        # 1) PNG originales de la interfaz
+        orig = proj.dir("originales")
+        if forzar or not glob.glob(os.path.join(orig, "*.png")):
+            n, skipped = motor.exportar_imagenes(game, orig)
+            rep["imagenes_exportadas"] = n
+            log(f"imágenes de la interfaz: {n} PNG en {orig}")
+        else:
+            log("imágenes de la interfaz: ya estaban exportadas")
+        # 2) galería editable
+        cnt = img_index.build(orig, proj.dir("traducidas"), proj.dir("indice"), proj.estado_tsv, ocr,
+                              pantallas=proj.perfil.seccion("galeria").get("pantallas"))
+        rep["indice"] = dict(cnt)
+        log(f"galería de imágenes: {os.path.join(proj.dir('indice'), 'index.html')}")
+    if base.TEXTO in motor.capacidades:
+        _exportar_texto(proj, motor, forzar, rep, log)
+    return rep
+
+
+def _exportar_texto(proj, motor, forzar, rep, log):
+    from . import texto as txt
     texto = proj.dir("texto")
     hojas = glob.glob(os.path.join(texto, "*.xlsx"))
     if hojas and not forzar:
@@ -50,11 +62,27 @@ def exportar(proj, forzar=False, ocr=False, log=print):
             for h in hojas:
                 shutil.move(h, dest)
             log(f"texto: copia de las hojas anteriores en {dest}")
-        r = txt_export.export_text(game, texto, None, proj.parche_viejo)
+        r = txt.exportar(motor.textos(proj.root, proj.parche_viejo), texto)
         rep["texto"] = r
         log(f"texto: {r['scripts']} escenarios, {r['filas']} filas ({r['precargadas']} precargadas desde el parche viejo) en {texto}")
         if r["sin_texto"]:
             log(f"       ({len(r['sin_texto'])} escenarios sin texto que traducir no tienen hoja: guiones de configuración y finales)")
+
+
+def build(proj, out, estados=base.ESTADOS_LISTOS, opciones=None, jugable=False, log=print):
+    """Arma en 'out' lo que hay que copiar al juego: el motor aplica las hojas de texto y las imágenes traducidas.
+    jugable=True agrega enlaces a los archivos del juego (carpeta de prueba que se ejecuta tal cual)."""
+    from . import enlaces, texto
+    exe = proj.original_exe()
+    rep = {"enlaces": 0, "metodos_enlace": {}}
+    os.makedirs(out, exist_ok=True)
+    if jugable:
+        rep["enlaces"], rep["metodos_enlace"] = enlaces.link_game(proj.root, os.path.abspath(out), proj.perfil)
+    hojas = proj.dir("texto")
+    filas = texto.recolectar([hojas]) if glob.glob(os.path.join(hojas, "*.xlsx")) else None
+    trad = proj.dir("traducidas")
+    imagenes = trad if os.path.isdir(trad) and os.listdir(trad) else None
+    rep.update(proj.motor.construir(proj.root, out, filas, imagenes, estados, opciones or {}, proj.parche_viejo, exe, log))
     return rep
 
 
@@ -88,9 +116,10 @@ def _tabla(titulo, filas, log, ancho):
 def estado(proj, log=print, nivel=0):
     """Resumen del proyecto y del avance de la traducción.  nivel 1: una tabla por archivo; nivel 2: además, por escenario.
     «listo» = filas «traducido» + «del parche», que es lo que `build` aplica por defecto."""
-    from .text import sheet
+    from . import hojas as sheet
     log(f"proyecto:        {proj.root}")
-    log(f"motor:           {proj.cfg.get('motor')}")
+    log(f"juego:           {proj.perfil.nombre} (perfil {proj.perfil.id})")
+    log(f"motor:           {proj.perfil.motor}" + (f", versión {proj.version}" if proj.version else ""))
     log(f"parche viejo:    {proj.parche_viejo or '(no configurado)'}")
     hojas = sorted(glob.glob(os.path.join(proj.dir("texto"), "*.xlsx")))
     if hojas:
@@ -199,7 +228,7 @@ def desinstalar(proj, log=print):
         else:
             shutil.copy2(os.path.join(bdir, rel), dst)
             restaurados += 1
-    for d in ("Script", "Graphic", "Sound", "Voice"):                       # carpetas que quedaron vacías
+    for d in proj.motor.carpetas_sueltas:                                   # carpetas que quedaron vacías
         for root, dirs, files in os.walk(os.path.join(proj.root, d), topdown=False):
             if not os.listdir(root):
                 os.rmdir(root)

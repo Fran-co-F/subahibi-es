@@ -1,14 +1,15 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Parche del BGI.exe de la 15th Anniversary (fuente + modo proporcional).
+"""Parche del ejecutable de BGI (fuente + modo proporcional + modo UTF-8).
 
-No se distribuye ningún exe: se parchean unos pocos bytes de una copia del exe del usuario,
-y solo si su sha256 corresponde a una versión conocida (ver KNOWN_BUILDS).
+No se distribuye ningún exe: se parchean unos pocos bytes de una copia del exe del usuario, y solo si su sha256
+corresponde a una versión conocida.  Las versiones conocidas y sus direcciones están en los perfiles de juego
+([[bgi.ejecutables]], ver juegos/*.toml); desde_perfil() las convierte al diccionario que usa este módulo.
 
-Cambios (v1.685.3, x86_64):
+Cambios (ejemplo: v1.685.3, x86_64):
 
  1) Fuente.  El motor busca "MS Gothic" (inglés y japonés) para dibujar el texto.  Se cambian
-    esas cadenas por "SubaHibi07Inq", la fuente que remapea los katakana de ancho medio
-    a letras con tilde.  Cada cadena tiene 16 bytes de espacio.
+    esas cadenas por la fuente del perfil (por ejemplo "SubaHibi07Inq", la del parche viejo).
+    Cada cadena tiene 16 bytes de espacio.
  3) (opcional, utf8=True) Modo UTF-8: el exe de la 15th trae la instrucción `81 00` / Text_SetEncoding; se
     desvía el punto de entrada hacia un hueco de relleno que llama Text_SetEncoding(1) y sigue con el arranque.
  2) Modo proporcional.  WindowSetFont(ventana, fuente, tamaño, ancho, negrita, proporcional,
@@ -20,23 +21,6 @@ Cambios (v1.685.3, x86_64):
 import hashlib
 import struct
 
-DEFAULT_FONT = "SubaHibi07Inq"                       # cada cadena del exe tiene 16 bytes de espacio: hasta 15 caracteres
-FONT_NAME = DEFAULT_FONT.encode().ljust(16, b"\x00")
-
-KNOWN_BUILDS = {
-    "993e9803a4335ff752dd7b4fd7b5036c3200c88c74fbde05d29b5123be5bd29c": {
-        "version": "1.685.3 (15th Anniversary, x86_64)",
-        "text_va": 0x140001000, "text_raw": 0x400,        # sección .text
-        "font": [(0x17C740, b"MS Gothic\x00"),              # (offset en archivo, contenido esperado)
-                 (0x17C750, b"\x82l\x82r \x83S\x83V\x83b\x83N\x00")],
-        "hook": 0x1400DF7FA, "hook_bytes": "89742428458bc4",
-        "cave": 0x1400DF76C, "back": 0x1400DF801,
-        # modo UTF-8: el punto de entrada pasa por un desvío que llama a Text_SetEncoding(1)
-        "entry_field": 0x150, "entry_rva": 0x11D74, "image_base": 0x140000000,
-        "utf8_cave": 0x140001DF0, "set_encoding": 0x1400F74C0,
-    },
-}
-
 
 class PatchError(Exception):
     pass
@@ -46,10 +30,23 @@ def sha256(data):
     return hashlib.sha256(data).hexdigest()
 
 
-def identify(data):
-    """(sha256, datos_de_build | None)"""
+def desde_perfil(d):
+    """Un bloque [[bgi.ejecutables]] del perfil -> diccionario de versión (con 'font' como [(desplazamiento, bytes)])."""
+    for k in ("sha256", "version"):
+        if not isinstance(d.get(k), str):
+            raise PatchError(f"[[bgi.ejecutables]]: falta «{k}»")
+    b = dict(d)
+    try:
+        b["font"] = [(f["offset"], bytes.fromhex(f["original"])) for f in d.get("font", [])]
+    except (KeyError, TypeError, ValueError) as e:
+        raise PatchError(f"[[bgi.ejecutables]] {d['version']}: «font» mal escrito ({e})")
+    return b
+
+
+def identify(data, builds):
+    """(sha256, datos_de_build | None).  builds: {sha256: datos_de_build}."""
     h = sha256(data)
-    return h, KNOWN_BUILDS.get(h)
+    return h, builds.get(h)
 
 
 def font_slot(name):
@@ -60,22 +57,24 @@ def font_slot(name):
     return raw.ljust(16, b"\x00")
 
 
-def is_patched(data):
+def is_patched(data, builds):
     """True si el exe ya lleva un cambio de fuente (la original es 'MS Gothic')."""
-    for b in KNOWN_BUILDS.values():
+    for b in builds.values():
         if all(data[o:o + 16] != old.ljust(16, b"\x00") for o, old in b["font"]):
             return True
     return False
 
 
-def patch(data, font=True, proportional=True, utf8=False, font_name=DEFAULT_FONT):
-    """Devuelve una copia parcheada de 'data' (bytes) o lanza PatchError.
+def patch(data, builds, font=True, proportional=True, utf8=False, font_name=None):
+    """Devuelve una copia parcheada de 'data' (bytes) o lanza PatchError.  builds: {sha256: datos_de_build}.
     utf8=True activa el modo UTF-8 del motor desde el arranque (hay que entregar todo el texto en UTF-8)."""
-    h, b = identify(data)
+    h, b = identify(data, builds)
     if b is None:
         raise PatchError(
             f"exe desconocido (sha256 {h}). Este parche es para: "
-            + "; ".join(v["version"] for v in KNOWN_BUILDS.values()))
+            + ("; ".join(v["version"] for v in builds.values()) or "ninguna versión (no hay perfiles con [[bgi.ejecutables]])"))
+    if font and not font_name:
+        raise PatchError("falta el nombre de la fuente (opción --fuente o «fuente» en la sección [bgi] del perfil)")
     d = bytearray(data)
     off = lambda va: va - b["text_va"] + b["text_raw"]
     if font:

@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Reimporta las hojas de traducción: arma los escenarios del juego con el español.
+"""Arma los escenarios del juego con el español de las filas (las hojas las lee nucleo/texto.py).
 
 Método: parche binario de cadenas.  Del escenario original (japonés, de la 15th) no se toca ningún token
 salvo el operando de los 'str' de los textos traducidos, que pasan a apuntar a cadenas nuevas agregadas al
@@ -7,38 +7,16 @@ final de la tabla de cadenas.  Como los operandos son desplazamientos desde el i
 cadenas nuevas van al final, nada se reubica: saltos, exportaciones y demás operandos quedan intactos.
 """
 import os
-from ..bgi import scn
-from . import accents, extract, sheet
-from .export import scenarios
+from .. import scn
+from ....nucleo import hojas
+from . import accents, extract
+from .export import DATA_ARCS, scenarios
 
 APLICAR = ("traducido", "del parche")
 
 
 class ImportError_(Exception):
     pass
-
-
-def collect(paths):
-    """{script: [filas]} a partir de archivos .xlsx / .tsv o carpetas con ellos."""
-    files = []
-    for p in paths:
-        if os.path.isdir(p):
-            for f in sorted(os.listdir(p)):
-                if f.lower().endswith((".xlsx", ".tsv")):
-                    files.append(os.path.join(p, f))
-            tsvdir = os.path.join(p, "tsv")
-            if os.path.isdir(tsvdir):
-                files += [os.path.join(tsvdir, f) for f in sorted(os.listdir(tsvdir)) if f.endswith(".tsv")]
-        else:
-            files.append(p)
-    out = {}
-    for f in files:
-        sheets = sheet.read_xlsx(f) if f.lower().endswith(".xlsx") else {os.path.basename(f): sheet.read_tsv(f)}
-        for rows in sheets.values():
-            for r in rows:
-                script = r["clave"].rsplit(":", 1)[0]
-                out.setdefault(script, {})[r["clave"]] = r      # la última gana si una fila está repetida
-    return {k: list(v.values()) for k, v in out.items()}
 
 
 def build_script(name, jp_bytes, rows, estados=APLICAR, utf8=False):
@@ -86,7 +64,7 @@ def build_script(name, jp_bytes, rows, estados=APLICAR, utf8=False):
         row = by_pos.get(pos)
         if row is None:
             errs.append((r["clave"], f"no hay texto en la posición {pos}: ¿hoja de otra versión?")); continue
-        if sheet.jp_hash(row.raw) != r.get("hash"):
+        if hojas.jp_hash(row.raw) != r.get("hash"):
             errs.append((r["clave"], "el texto japonés no coincide con el del juego (hash distinto)")); continue
         if utf8:
             raw = es.encode("utf-8")
@@ -122,7 +100,7 @@ def build_script(name, jp_bytes, rows, estados=APLICAR, utf8=False):
     return out, dict(cambiadas=changed, omitidas=skipped, errores=errs, sin_convertir=unconverted)
 
 
-def apply_rows(game_dir, data, out_game_dir, estados=APLICAR, utf8=False):
+def apply_rows(game_dir, data, out_game_dir, estados=APLICAR, utf8=False, patrones=DATA_ARCS):
     """data = {escenario: [filas]}.  Escribe out_game_dir/Script/CVTD/<escenario> para los que cambian.
     Con utf8=True se escriben TODOS los escenarios del juego (también los sin traducir), porque el motor en
     modo UTF-8 necesita todas las cadenas en UTF-8."""
@@ -130,7 +108,7 @@ def apply_rows(game_dir, data, out_game_dir, estados=APLICAR, utf8=False):
     os.makedirs(dest, exist_ok=True)
     total = dict(scripts=0, cambiadas=0, omitidas=0, errores=[], sin_convertir=0)
     seen = set()
-    for _arc, name, jp in scenarios(game_dir):
+    for _arc, name, jp in scenarios(game_dir, patrones=patrones):
         if name not in data and not utf8:
             continue
         seen.add(name)
@@ -148,6 +126,3 @@ def apply_rows(game_dir, data, out_game_dir, estados=APLICAR, utf8=False):
         total["errores"].append((name, "no existe un escenario con ese nombre en el juego"))
     return total
 
-
-def import_text(game_dir, sheet_paths, out_game_dir, estados=APLICAR, utf8=False, log=print):
-    return apply_rows(game_dir, collect(sheet_paths), out_game_dir, estados, utf8)

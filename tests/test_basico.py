@@ -6,10 +6,19 @@ import struct
 import pytest
 from PIL import Image
 
-from subahibi_es import exe_patch
-from subahibi_es.bgi import image
-from subahibi_es.bgi.arc import Arc
-from subahibi_es.images import import_, index
+from subahibi_es.motores.bgi import exe_patch
+from subahibi_es.motores.bgi import image
+from subahibi_es.motores.bgi.arc import Arc
+from subahibi_es.nucleo.galeria import index
+
+
+@pytest.fixture(autouse=True)
+def _aislado(tmp_path, monkeypatch):
+    """Ni los perfiles del usuario ni un proyecto forzado por variable de entorno afectan a las pruebas."""
+    monkeypatch.delenv("SUBAHIBI_ES_PERFILES", raising=False)
+    monkeypatch.delenv("SUBAHIBI_ES_PROJECT", raising=False)
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config-usuario"))
+    monkeypatch.setenv("APPDATA", str(tmp_path / "config-usuario"))
 
 
 def test_imagen_cruda_ida_y_vuelta():
@@ -22,7 +31,7 @@ def test_imagen_cruda_ida_y_vuelta():
 
 def test_exe_desconocido_se_rechaza():
     with pytest.raises(exe_patch.PatchError):
-        exe_patch.patch(b"MZ" + b"\0" * 100)
+        exe_patch.patch(b"MZ" + b"\0" * 100, {})
 
 
 def test_arc_sintetico(tmp_path):
@@ -42,7 +51,7 @@ def test_estado_manual_gana(tmp_path):
 
 @pytest.mark.skipif(not os.environ.get("GAME_DIR"), reason="GAME_DIR no definido")
 def test_juego_real_sysgrp():
-    from subahibi_es.images import export
+    from subahibi_es.motores.bgi.images import export
     import tempfile
     out = os.path.join(tempfile.gettempdir(), "subahibi_es_test")
     n, skipped = export.export_arc(os.path.join(os.environ["GAME_DIR"], "sysgrp.arc"), out)
@@ -52,7 +61,7 @@ def test_juego_real_sysgrp():
 def _escenario_sintetico(textos):
     """Escenario mínimo: cabecera, un push, un 'str' por texto y la tabla de cadenas."""
     import struct
-    from subahibi_es.bgi import scn
+    from subahibi_es.motores.bgi import scn
     head_rest = struct.pack("<I", 0) + struct.pack("<I", 1) + b"main\0" + struct.pack("<I", 0)
     head = scn.MAGIC + struct.pack("<I", 4 + len(head_rest) + 0)
     head += head_rest
@@ -69,7 +78,7 @@ def _escenario_sintetico(textos):
 
 
 def test_escenario_ida_y_vuelta():
-    from subahibi_es.bgi import scn
+    from subahibi_es.motores.bgi import scn
     data = _escenario_sintetico(["hola", "mundo"])
     sc = scn.parse(data)
     assert scn.serialize(sc) == data
@@ -85,7 +94,7 @@ def test_pagina_funciones_puras(tmp_path):
     node = shutil.which("node")
     if not node:
         pytest.skip("node no instalado")
-    from subahibi_es.images import _page
+    from subahibi_es.nucleo.galeria import _page
     rows = [dict(n="SGX000000", g="SGX", w=2, h=1, st="sin_clasificar", note="", tr=False)]
     html = _page.render(rows, {"traducida": "T", "sin_clasificar": "S"}, {"traducida": "#000", "sin_clasificar": "#111"})
     js = html.split("<script>")[1].split("</script>")[0]
@@ -112,7 +121,7 @@ fs.writeFileSync(process.argv[3],makeZip([{name:'a.png',data:new Uint8Array([1,2
 
 
 def test_acentos_ida_y_vuelta():
-    from subahibi_es.text import accents
+    from subahibi_es.motores.bgi.text import accents
     s = "¿Qué está pasando, señor Núñez? ¡Ándale! Pingüino, ÉL, ÍNDICE, ÓPERA, ÚLTIMO, ÜBER, Ñandú"
     raw = accents.encode(s)
     assert accents.decode(raw) == s
@@ -124,7 +133,7 @@ def test_acentos_ida_y_vuelta():
 def _escenario_con_textos(textos, cmd=0x140):
     """Escenario sintético: por cada texto, 'str' + un comando (por defecto 0x140 = mensaje)."""
     import struct
-    from subahibi_es.bgi import scn
+    from subahibi_es.motores.bgi import scn
     head_rest = struct.pack("<I", 0) + struct.pack("<I", 1) + b"main\0" + struct.pack("<I", 0)
     head = scn.MAGIC + struct.pack("<I", 4 + len(head_rest)) + head_rest
     head += b"\0" * ((-len(head)) % 16)
@@ -139,8 +148,9 @@ def _escenario_con_textos(textos, cmd=0x140):
 
 
 def test_texto_exportar_e_importar():
-    from subahibi_es.bgi import scn
-    from subahibi_es.text import accents, export, extract, import_
+    from subahibi_es.motores.bgi import scn
+    from subahibi_es.motores.bgi.text import accents, export, extract, import_
+    from subahibi_es.nucleo import hojas
     jp = _escenario_con_textos(["こんにちは", "さようなら"])
     rows = export.script_rows("prueba", jp)
     assert [r["tipo"] for r in rows] == ["mensaje", "mensaje"] and rows[0]["japones"] == "こんにちは"
@@ -154,12 +164,12 @@ def test_texto_exportar_e_importar():
     # un hash distinto (juego de otra versión) y un carácter imposible se rechazan
     rows[0]["hash"] = "00000000"
     assert import_.build_script("prueba", jp, rows)[1]["errores"]
-    rows[0]["hash"] = export.sheet.jp_hash("こんにちは".encode("cp932")); rows[0]["espanol"] = "precio 5 €"
+    rows[0]["hash"] = hojas.jp_hash("こんにちは".encode("cp932")); rows[0]["espanol"] = "precio 5 €"
     assert "€" in import_.build_script("prueba", jp, rows)[1]["errores"][0][1]
 
 
 def test_tsv_escapes(tmp_path):
-    from subahibi_es.text import sheet
+    from subahibi_es.nucleo import hojas as sheet
     fila = dict(clave="a:00001", tipo="mensaje", japones="x\ty\nz\\", espanol="línea1\nlínea2", estado="traducido",
                 nota="", pos=12, hash="abcd1234")
     p = tmp_path / "a.tsv"
@@ -170,7 +180,7 @@ def test_tsv_escapes(tmp_path):
 
 def test_parche_viejo_zip_y_config(tmp_path, monkeypatch):
     import zipfile
-    from subahibi_es import config, oldpatch
+    from subahibi_es.motores.bgi import oldpatch
     jp = _escenario_con_textos(["hola"])
     z = tmp_path / "parche.zip"
     with zipfile.ZipFile(z, "w") as zf:
@@ -187,8 +197,8 @@ def test_parche_viejo_zip_y_config(tmp_path, monkeypatch):
 
 def test_modo_utf8_reescribe_todo():
     """En modo UTF-8 también las cadenas japonesas sin traducir pasan de Shift-JIS a UTF-8."""
-    from subahibi_es.bgi import scn
-    from subahibi_es.text import export, extract, import_
+    from subahibi_es.motores.bgi import scn
+    from subahibi_es.motores.bgi.text import export, extract, import_
     jp = _escenario_con_textos(["こんにちは", "さようなら"])
     rows = export.script_rows("prueba", jp)
     rows[0]["espanol"], rows[0]["estado"] = "¡Hola, señor! ñé", "traducido"
@@ -203,12 +213,12 @@ def test_modo_utf8_reescribe_todo():
 
 
 def test_exe_utf8_desvia_la_entrada():
-    from subahibi_es import exe_patch
+    from subahibi_es.motores.bgi import exe_patch
     assert "utf8" in exe_patch.patch.__code__.co_varnames
 
 
 def test_wrap_corta_en_palabras():
-    from subahibi_es.text import wrap
+    from subahibi_es.nucleo import wrap
     fits = wrap.make_fits(max_chars=20)
     t = "El veloz murciélago hindú comía feliz cardillo"
     r = wrap.wrap_text(t, fits)
@@ -224,7 +234,7 @@ def test_wrap_corta_en_palabras():
 
 def test_nombre_de_fuente_configurable():
     import pytest
-    from subahibi_es import exe_patch
+    from subahibi_es.motores.bgi import exe_patch
     assert exe_patch.font_slot("Lune") == b"Lune" + b"\0" * 12
     for malo in ("", "NombreDeFuenteDemasiadoLargo", "Fuente ñ"):
         with pytest.raises(exe_patch.PatchError):
@@ -235,7 +245,7 @@ def test_enlaces_con_respaldo(tmp_path, monkeypatch):
     """Sin permiso para enlaces simbólicos (Windows normal) se usa enlace duro y, si tampoco, copia."""
     import os as _os
     import shutil
-    from subahibi_es import build
+    from subahibi_es.nucleo import enlaces as build
     src = tmp_path / "datos.arc"
     src.write_bytes(b"x" * 100)
     assert build._link(str(src), str(tmp_path / "a")) in ("enlace simbólico", "enlace duro")
@@ -249,23 +259,44 @@ def test_enlaces_con_respaldo(tmp_path, monkeypatch):
     assert shutil.copy2  # (la copia conserva la fecha, por eso se reconoce)
 
 
+REQUERIDOS = ("BGI.exe", "sysgrp.arc", "sysprg.arc", "system.arc", "data01101.arc")
+
+
+def _perfil(tmp_path, monkeypatch, texto, nombre="falso.toml"):
+    """Escribe un perfil de juego en una carpeta de $SUBAHIBI_ES_PERFILES."""
+    d = tmp_path / "perfiles"
+    d.mkdir(exist_ok=True)
+    (d / nombre).write_text(texto, encoding="utf-8")
+    monkeypatch.setenv("SUBAHIBI_ES_PERFILES", str(d))
+    return d / nombre
+
+
 def _juego_falso(tmp_path, monkeypatch):
-    """Una 'instalación' mínima: el BGI.exe falso se registra como versión conocida."""
-    from subahibi_es import exe_patch, project
+    """Una 'instalación' mínima: un perfil de prueba registra el BGI.exe falso como versión conocida."""
     g = tmp_path / "juego"
     g.mkdir()
     (g / "BGI.exe").write_bytes(b"MZ-falso")
-    for f in project.REQUIRED[1:]:
+    for f in REQUERIDOS[1:]:
         (g / f).write_bytes(b"x")
-    monkeypatch.setitem(exe_patch.KNOWN_BUILDS, exe_patch.sha256(b"MZ-falso"), {"version": "falso 1.0"})
+    _perfil(tmp_path, monkeypatch, f"""
+id = "falso"
+nombre = "Juego falso"
+motor = "bgi"
+[deteccion]
+requeridos = {list(REQUERIDOS)!r}
+ejecutable = "BGI.exe"
+[[bgi.ejecutables]]
+sha256 = "{exe_patch.sha256(b"MZ-falso")}"
+version = "falso 1.0"
+""".replace("'", '"'))
     return g
 
 
 def test_init_valida_y_crea_el_proyecto(tmp_path, monkeypatch):
-    from subahibi_es import project
+    from subahibi_es.nucleo import proyecto as project
     g = _juego_falso(tmp_path, monkeypatch)
     proj, creado = project.init(str(g))
-    assert creado and proj.cfg["motor"] == "falso 1.0"
+    assert creado and proj.cfg["perfil"] == "falso" and proj.cfg["motor"] == "bgi" and proj.version == "falso 1.0"
     for name in ("originales", "texto", "traducidas", "indice", "backup", "salida"):
         assert (g / project.WORK / project.SUBDIRS[name]).is_dir()
     assert (g / project.WORK / "backup" / "BGI.exe").read_bytes() == b"MZ-falso"      # respaldo del exe original
@@ -282,7 +313,7 @@ def test_init_valida_y_crea_el_proyecto(tmp_path, monkeypatch):
 
 
 def test_init_rechaza_lo_que_no_es_el_juego(tmp_path):
-    from subahibi_es import project
+    from subahibi_es.nucleo import proyecto as project
     vacia = tmp_path / "otra"
     vacia.mkdir()
     with pytest.raises(project.ProjectError) as e:
@@ -295,7 +326,7 @@ def test_init_rechaza_lo_que_no_es_el_juego(tmp_path):
 
 
 def test_reset_no_toca_el_juego(tmp_path, monkeypatch):
-    from subahibi_es import project
+    from subahibi_es.nucleo import proyecto as project
     g = _juego_falso(tmp_path, monkeypatch)
     proj, _ = project.init(str(g))
     project.reset(proj)                                           # solo el JSON
@@ -306,7 +337,7 @@ def test_reset_no_toca_el_juego(tmp_path, monkeypatch):
 
 
 def test_instalar_y_desinstalar(tmp_path, monkeypatch):
-    from subahibi_es import project, workflow
+    from subahibi_es.nucleo import flujo as workflow, proyecto as project
     g = _juego_falso(tmp_path, monkeypatch)
     proj, _ = project.init(str(g))
     salida = g / project.WORK / "salida"
@@ -325,7 +356,8 @@ def test_instalar_y_desinstalar(tmp_path, monkeypatch):
 
 
 def test_cli_init_estado_reset(tmp_path, monkeypatch, capsys):
-    from subahibi_es import cli, project
+    from subahibi_es import cli
+    from subahibi_es.nucleo import proyecto as project
     g = _juego_falso(tmp_path, monkeypatch)
     monkeypatch.chdir(g)
     assert cli.main(["init"]) == 0 and (g / "subahibi-es.json").exists()
@@ -346,7 +378,7 @@ def test_parche_viejo_se_guarda_relativo(tmp_path, monkeypatch):
     """Si el parche viejo está dentro del proyecto, la ruta se guarda relativa y sobrevive a mover la carpeta."""
     import json
     import shutil
-    from subahibi_es import project
+    from subahibi_es.nucleo import proyecto as project
     g = _juego_falso(tmp_path, monkeypatch)
     (g / "parche.zip").write_bytes(b"x")
     proj, _ = project.init(str(g), str(g / "parche.zip"))
@@ -362,8 +394,7 @@ def test_parche_viejo_se_guarda_relativo(tmp_path, monkeypatch):
 
 
 def test_estado_tsv_arranca_vacio(tmp_path, monkeypatch):
-    from subahibi_es import project
-    from subahibi_es.images import index
+    from subahibi_es.nucleo import proyecto as project
     g = _juego_falso(tmp_path, monkeypatch)
     proj, _ = project.init(str(g))
     assert index.read_status(proj.estado_tsv) == []                          # solo comentarios: ninguna regla propia
@@ -372,20 +403,21 @@ def test_estado_tsv_arranca_vacio(tmp_path, monkeypatch):
 
 def test_export_no_crea_hojas_vacias(tmp_path, monkeypatch):
     pytest.importorskip("openpyxl")
-    from subahibi_es.text import export
+    from subahibi_es.motores.bgi.text import export
+    from subahibi_es.nucleo import texto
     con = _escenario_con_textos(["hola", "mundo"])
     sin = _escenario_con_textos(["cualquier_nombre"], cmd=0x1a1)     # una cadena que no es texto (nombre de archivo, etc.)
-    monkeypatch.setattr(export, "scenarios", lambda game, arcs=None: iter([("a", "con_texto", con), ("a", "sin_texto", sin), ("b", "solo_vacio", sin)]))
-    r = export.export_text(str(tmp_path), str(tmp_path / "out"), None, None)
+    fuente = [(g, n, export.script_rows(n, d)) for g, n, d in [("a", "con_texto", con), ("a", "sin_texto", sin), ("b", "solo_vacio", sin)]]
+    r = texto.exportar(fuente, str(tmp_path / "out"))
     assert r["scripts"] == 1 and sorted(r["sin_texto"]) == ["sin_texto", "solo_vacio"]
     assert sorted(f.name for f in (tmp_path / "out").iterdir()) == ["a.xlsx"]     # b.xlsx no existe: no tenía ninguna hoja con filas
-    from subahibi_es.text import sheet
+    from subahibi_es.nucleo import hojas as sheet
     assert list(sheet.read_xlsx(str(tmp_path / "out" / "a.xlsx"))) == ["con_texto"]
 
 
 def test_alineacion_dudosa_por_correlacion_de_largos():
     import random
-    from subahibi_es.text import align
+    from subahibi_es.nucleo import alineacion as align
     random.seed(7)
     jp = [random.randint(3, 120) for _ in range(300)]
     es = [int(x * 2.4) + random.randint(-4, 4) for x in jp]               # bien alineado: largos proporcionales
@@ -398,7 +430,7 @@ def test_alineacion_dudosa_por_correlacion_de_largos():
 
 
 def test_precarga_quita_el_tab_final(tmp_path, monkeypatch):
-    from subahibi_es.text import export
+    from subahibi_es.motores.bgi.text import export
     jp = _escenario_con_textos(["こんにちは"])
     old = _escenario_con_textos(["Hola\t"])                               # el parche viejo agrega un TAB final
     rows = export.script_rows("p", jp, old)
@@ -407,8 +439,7 @@ def test_precarga_quita_el_tab_final(tmp_path, monkeypatch):
 
 def test_estado_por_archivo_y_por_escenario(tmp_path, monkeypatch):
     pytest.importorskip("openpyxl")
-    from subahibi_es import project, workflow
-    from subahibi_es.text import sheet
+    from subahibi_es.nucleo import flujo as workflow, hojas as sheet, proyecto as project
     g = _juego_falso(tmp_path, monkeypatch)
     proj, _ = project.init(str(g))
     fila = lambda i, st: dict(clave=f"x:{i:05d}", tipo="mensaje", japones="j", espanol="e" if st != "sin traducir" else "",
@@ -429,3 +460,144 @@ def test_estado_por_archivo_y_por_escenario(tmp_path, monkeypatch):
     assert [l for l in v1.splitlines() if l.startswith("data02")][0].split()[:3] == ["data02", "4", "0.0%"]
     assert "== data01 ==" in v2 and "esc_a" in v2 and "esc_c" in v2
     assert [l for l in v2.splitlines() if l.startswith("esc_a")][0].split()[:3] == ["esc_a", "4", "50.0%"]
+
+
+# ---------------------------------------------------------------- perfiles y motores
+
+def test_perfil_incluido_conserva_los_datos_del_exe():
+    """El perfil TOML de la 15th reproduce exactamente las direcciones que antes estaban fijas en exe_patch.py."""
+    from subahibi_es import motores
+    from subahibi_es.nucleo import perfiles
+    perfil = perfiles.obtener("subahibi-15th")
+    m = motores.crear(perfil)
+    b = m.builds["993e9803a4335ff752dd7b4fd7b5036c3200c88c74fbde05d29b5123be5bd29c"]
+    assert b["font"] == [(0x17C740, b"MS Gothic\x00"), (0x17C750, b"\x82l\x82r \x83S\x83V\x83b\x83N\x00")]
+    assert (b["hook"], b["hook_bytes"], b["cave"], b["back"]) == (0x1400DF7FA, "89742428458bc4", 0x1400DF76C, 0x1400DF801)
+    assert (b["entry_field"], b["entry_rva"], b["image_base"], b["utf8_cave"], b["set_encoding"]) == \
+        (0x150, 0x11D74, 0x140000000, 0x140001DF0, 0x1400F74C0)
+    assert m.fuente == "SubaHibi07Inq" and m.data_arcs == ("data0*.arc",) and m.ui_arcs == ("sysgrp.arc",)
+    assert perfil.requeridos == list(REQUERIDOS) and perfil.ejecutable == "BGI.exe"
+
+
+def test_perfil_del_usuario_gana_y_errores_claros(tmp_path, monkeypatch):
+    from subahibi_es.nucleo import perfiles
+    # un perfil del usuario con el mismo id reemplaza al incluido
+    d = tmp_path / "config-usuario" / "subahibi-es" / "juegos"
+    d.mkdir(parents=True)
+    (d / "mio.toml").write_text('id = "subahibi-15th"\nnombre = "Mi versión"\nmotor = "bgi"\n', encoding="utf-8")
+    assert perfiles.obtener("subahibi-15th").nombre == "Mi versión"
+    # $SUBAHIBI_ES_PERFILES tiene más prioridad que la carpeta del usuario
+    _perfil(tmp_path, monkeypatch, 'id = "subahibi-15th"\nnombre = "De la variable"\nmotor = "bgi"\n')
+    assert perfiles.obtener("subahibi-15th").nombre == "De la variable"
+    with pytest.raises(perfiles.PerfilError, match="no encuentro el perfil"):
+        perfiles.obtener("no-existe")
+    for malo, msg in [('nombre = "x"\nmotor = "bgi"\n', "falta «id»"), ('id = "x"\nnombre = "x"\nmotor = "bgi"\ntexto = 3\n', "sección"),
+                      ("id = = 1", "TOML inválido")]:
+        p = tmp_path / "malo.toml"
+        p.write_text(malo, encoding="utf-8")
+        with pytest.raises(perfiles.PerfilError, match=msg):
+            perfiles.leer(str(p))
+
+
+def test_motor_desconocido_y_seccion_mal_escrita(tmp_path, monkeypatch):
+    from subahibi_es import motores
+    from subahibi_es.nucleo import perfiles
+    with pytest.raises(motores.MotorError, match="motor desconocido «nada»"):
+        motores.crear(perfiles.Perfil({"id": "x", "nombre": "x", "motor": "nada"}))
+    with pytest.raises(motores.MotorError, match="falta «version»"):
+        motores.crear(perfiles.Perfil({"id": "x", "nombre": "x", "motor": "bgi", "bgi": {"ejecutables": [{"sha256": "ab"}]}}))
+    with pytest.raises(motores.MotorError, match="fuente"):
+        motores.crear(perfiles.Perfil({"id": "x", "nombre": "x", "motor": "bgi", "bgi": {"fuente": "Fuente ñ"}}))
+
+
+def test_init_con_varios_perfiles_muestra_el_mas_parecido(tmp_path, monkeypatch):
+    from subahibi_es.nucleo import proyecto as project
+    _perfil(tmp_path, monkeypatch, 'id = "otro"\nnombre = "Otro juego"\nmotor = "bgi"\n[deteccion]\nrequeridos = ["otro.dat"]\n')
+    g = tmp_path / "carpeta"
+    g.mkdir()
+    (g / "otro.dat").write_bytes(b"x")
+    proj, _ = project.init(str(g))                        # un juego sin ejecutable que reconocer también vale
+    assert proj.perfil.id == "otro" and proj.original_exe() is None
+    vacia = tmp_path / "vacia"
+    vacia.mkdir()
+    with pytest.raises(project.ProjectError, match="el más parecido es Otro juego") as e:
+        project.init(str(vacia))
+    assert "falta otro.dat" in str(e.value)
+
+
+def test_proyecto_viejo_sin_perfil_se_sigue_abriendo(tmp_path):
+    """Los proyectos creados antes de los perfiles guardaban la versión del exe en «motor» y no tenían «perfil»."""
+    import json
+    from subahibi_es.nucleo import proyecto as project
+    (tmp_path / project.NAME).write_text(json.dumps({"version_del_proyecto": 1, "motor": "1.685.3 (15th Anniversary, x86_64)",
+                                                     "parche_viejo": None}), encoding="utf-8")
+    proj = project.find(str(tmp_path))
+    assert proj.perfil.id == "subahibi-15th" and proj.motor.nombre == "bgi" and proj.version.startswith("1.685.3")
+
+
+def test_jugable_nunca_enlaza_el_ejecutable(tmp_path):
+    """Si el perfil pidiera enlazar los .exe, el del juego se omite: el exe parcheado se escribiría a través del enlace."""
+    from subahibi_es.nucleo import enlaces, perfiles
+    g, out = tmp_path / "g", tmp_path / "out"
+    g.mkdir(); out.mkdir()
+    for f in ("BGI.exe", "BHVC.exe", "a.arc", "nota.txt"):
+        (g / f).write_bytes(b"x")
+    perfil = perfiles.Perfil({"id": "x", "nombre": "x", "motor": "bgi", "deteccion": {"ejecutable": "BGI.exe"},
+                              "jugable": {"enlazar_extensiones": [".exe", ".arc"]}})
+    n, _m = enlaces.link_game(str(g), str(out), perfil)
+    assert n == 2 and sorted(os.listdir(out)) == ["BHVC.exe", "a.arc"]
+
+
+# Un motor mínimo de prueba, cargado como plugin (entry point): solo sabe texto.
+from subahibi_es.motores.base import Motor, TEXTO  # noqa: E402
+
+
+class MotorDePrueba(Motor):
+    nombre = "prueba"
+    capacidades = frozenset({TEXTO})
+    carpetas_sueltas = ("textos",)
+
+    def textos(self, juego, parche_viejo=None, archivos=None):
+        with open(os.path.join(juego, "juego.dat"), encoding="utf-8") as f:
+            lineas = f.read().splitlines()
+        filas = [dict(clave=f"esc1:{i:05d}", tipo="mensaje", japones=t, espanol="", estado="sin traducir", nota="", pos=i, hash="h")
+                 for i, t in enumerate(lineas, 1)]
+        yield "juego", "esc1", filas
+
+    def construir(self, juego, salida, filas=None, imagenes=None, estados=(), opciones=None, parche_viejo=None,
+                  ejecutable=None, log=print):
+        os.makedirs(os.path.join(salida, "textos"), exist_ok=True)
+        with open(os.path.join(salida, "textos", "esc1.txt"), "w", encoding="utf-8") as f:
+            for r in (filas or {}).get("esc1", []):
+                f.write((r["espanol"] if r["estado"] in estados and r["espanol"] else r["japones"]) + "\n")
+        return {"opciones": opciones}
+
+
+def test_plugin_de_motor_con_su_perfil_hace_todo_el_flujo(tmp_path, monkeypatch):
+    """Un motor nuevo = una clase + un entry point + un perfil TOML; el núcleo hace el resto (init, exportar, build, estado)."""
+    pytest.importorskip("openpyxl")
+    from importlib.metadata import EntryPoint
+    from subahibi_es import motores
+    from subahibi_es.nucleo import flujo, hojas, proyecto as project
+    ep = EntryPoint("prueba", f"{__name__}:MotorDePrueba", motores.GRUPO)
+    monkeypatch.setattr(motores, "entry_points", lambda group: [ep] if group == motores.GRUPO else [])
+    assert "prueba" in motores.disponibles()
+    _perfil(tmp_path, monkeypatch, 'id = "juego-prueba"\nnombre = "Juego de prueba"\nmotor = "prueba"\n'
+                                   '[deteccion]\nrequeridos = ["juego.dat"]\n')
+    g = tmp_path / "juego"
+    g.mkdir()
+    (g / "juego.dat").write_text("こんにちは\nさようなら\n", encoding="utf-8")
+    proj, _ = project.init(str(g))
+    assert proj.perfil.id == "juego-prueba" and isinstance(proj.motor, MotorDePrueba)
+    rep = flujo.exportar(proj, log=lambda *a: None)
+    assert "imagenes_exportadas" not in rep and rep["texto"]["filas"] == 2           # sin capacidad «imagenes», no se intenta
+    hoja = g / project.WORK / "texto" / "juego.xlsx"
+    sheets = hojas.read_xlsx(str(hoja))
+    sheets["esc1"][0].update(espanol="Hola", estado="traducido")
+    hojas.write_xlsx(str(hoja), sheets)
+    r = flujo.build(proj, proj.dir("salida"), opciones={"x": 1}, log=lambda *a: None)
+    assert r["opciones"] == {"x": 1}
+    assert (g / project.WORK / "salida" / "textos" / "esc1.txt").read_text(encoding="utf-8") == "Hola\nさようなら\n"
+    out = []
+    flujo.estado(proj, log=out.append)
+    assert any("Juego de prueba" in l for l in out) and any("listo 50.0%" in l for l in out)
