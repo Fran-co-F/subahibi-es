@@ -1,4 +1,4 @@
-# Plan de implementación: de *subahibi-es* a una herramienta para traducir cualquier VN
+# Plan de implementación: de *subahibi-es* a *tl-organizer*, una herramienta para traducir cualquier VN
 
 > Documento vivo. Cada fase termina con la herramienta usable y las pruebas en verde; el estado de cada tarea está
 > en la sección [Estado](#estado). Rama de trabajo: `motores-genericos`.
@@ -50,8 +50,8 @@ Principios (los que ya tiene el proyecto, más los nuevos):
 | Concepto | Qué es | Dónde vive |
 |---|---|---|
 | **Motor** | Clase Python que implementa la interfaz `Motor` y declara sus *capacidades* | `motores/<nombre>/` o un paquete aparte (entry point) |
-| **Perfil de juego** | TOML: identidad, detección, archivos, opciones del motor, nombres de pantallas | `motores/<motor>/juegos/*.toml`, carpeta del usuario o `$SUBAHIBI_ES_PERFILES` |
-| **Proyecto** | Una instalación del juego + `subahibi-es.json` + carpeta de trabajo | La carpeta del juego |
+| **Perfil de juego** | TOML: identidad, detección, archivos, opciones del motor, nombres de pantallas | `motores/<motor>/juegos/*.toml`, carpeta del usuario o `$TL_ORGANIZER_PERFILES` |
+| **Proyecto** | Una instalación del juego + `tl-organizer.json` + carpeta de trabajo | La carpeta del juego |
 | **Unidad de traducción** | Una fila: id estable, original, traducción, estado, contexto | Hojas / almacenamiento del núcleo |
 | **Recurso** | Una imagen de interfaz (u otro binario) que se reemplaza entero | Galería del núcleo |
 | **Capacidad** | Lo que un motor sabe hacer: `texto`, `imagenes`, `parche_viejo`, `ejecutable`… | `Motor.capacidades` |
@@ -59,7 +59,7 @@ Principios (los que ya tiene el proyecto, más los nuevos):
 ### 1.2 Árbol de paquetes (al terminar la fase 1)
 
 ```
-src/subahibi_es/
+src/tl_organizer/
   cli.py                 comandos generales; cada motor agrega los suyos
   nucleo/
     proyecto.py          Project, find, init, reset (la detección la delega en perfiles + motor)
@@ -74,7 +74,7 @@ src/subahibi_es/
     imagenes.py          abrir PNG/BMP con alfa
     galeria/             index.py, _page.py, ocr.py
   motores/
-    __init__.py          registro: motores incluidos + entry points «subahibi_es.motores»
+    __init__.py          registro: motores incluidos + entry points «tl_organizer.motores»
     base.py              clase Motor, capacidades, errores
     bgi/
       __init__.py        MotorBGI
@@ -153,13 +153,13 @@ Soportar otra versión del exe = agregar un bloque `[[bgi.ejecutables]]`, sin to
 
 - **Motores:** los incluidos (`motores/bgi`, …) más cualquier paquete instalado que declare
   ```toml
-  [project.entry-points."subahibi_es.motores"]
+  [project.entry-points."tl_organizer.motores"]
   mimotor = "mipaquete:MiMotor"
   ```
-  Instalar el paquete (`pip install subahibi-es-mimotor`) alcanza para que aparezca.
+  Instalar el paquete (`pip install tl-organizer-mimotor`) alcanza para que aparezca.
 - **Perfiles**, en orden de prioridad (un id repetido lo gana el primero):
-  1. `$SUBAHIBI_ES_PERFILES` (carpetas separadas por `os.pathsep`);
-  2. carpeta del usuario: `~/.config/subahibi-es/juegos/` (Linux/macOS, respeta `XDG_CONFIG_HOME`) o `%APPDATA%\subahibi-es\juegos\`;
+  1. `$TL_ORGANIZER_PERFILES` (carpetas separadas por `os.pathsep`);
+  2. carpeta del usuario: `~/.config/tl-organizer/juegos/` (Linux/macOS, respeta `XDG_CONFIG_HOME`) o `%APPDATA%\tl-organizer\juegos\`;
   3. los incluidos en cada motor (`motores/<motor>/juegos/*.toml`).
 - **Detección en `init`:** se prueban todos los perfiles; gana el primero sin problemas. Si ninguno coincide, el error muestra el más parecido
   (el de menos problemas) y qué le falta.
@@ -199,9 +199,9 @@ con el parche viejo e imágenes traducidas) produce **exactamente los mismos byt
   XLSX y **PO** como importar/exportar, para usar OmegaT, Weblate, Poedit, etc. (XLIFF solo si alguna herramienta lo pide: PO cubre las habituales.)
 - **Códigos de control** del motor como marcadores protegidos (`{nombre}`, `[r]`, `\n`): el motor declara una expresión regular y el núcleo
   valida que la traducción conserve los mismos marcadores.
-- **Control de calidad** (`subahibi-es revisar`): marcadores rotos, líneas que no entran, caracteres que la fuente no tiene, filas vacías con estado
+- **Control de calidad** (`tl-organizer revisar`): marcadores rotos, líneas que no entran, caracteres que la fuente no tiene, filas vacías con estado
   `traducido`, espacios dobles.
-- Decisión pendiente: **nombre del proyecto** (el paquete `subahibi_es` y el comando se renombrarían acá, dejando `subahibi-es` como alias).
+- **Nombre:** tl-organizer (paquete `tl_organizer`, comando `tl-organizer`; `subahibi-es` queda como alias y los proyectos `subahibi-es.json` se siguen abriendo).
 
 ### Fase 3 — Kit para escribir motores en Python
 
@@ -234,7 +234,7 @@ Si ya existe una biblioteca o una herramienta que entiende un formato, el motor 
 
 ### Fase 5 — API local e interfaz gráfica
 
-- **API:** `subahibi-es servir` levanta un servidor local (FastAPI o Starlette, solo en `127.0.0.1`) que expone el proyecto: estado, filas con filtros y
+- **API:** `tl-organizer servir` levanta un servidor local (FastAPI o Starlette, solo en `127.0.0.1`) que expone el proyecto: estado, filas con filtros y
   paginación, guardar filas, galería, `exportar`/`build`/`instalar` como *tareas* con progreso (eventos SSE o WebSocket).
 - **Frontend:** Svelte + Vite, compilado a archivos estáticos que van dentro del paquete Python. Pantallas:
   1. **Inicio:** proyectos recientes, "abrir carpeta del juego" (detección automática del perfil), crear perfil con un asistente.
@@ -244,16 +244,16 @@ Si ya existe una biblioteca o una herramienta que entiende un formato, el motor 
   4. **Galería:** la de hoy, migrada a componente (comparar original/traducida, arrastrar y soltar, estado por imagen) y guardando directo en el proyecto.
   5. **Avance:** el `estado -vv` con gráficos por archivo y escenario.
   6. **Build y prueba:** botón "armar y abrir el juego" (con Wine en Linux/macOS), registro de la tarea.
-- **Ventana nativa:** `subahibi-es gui` abre la misma interfaz en una ventana con pywebview; si hace falta algo más integrado, Tauri más adelante.
+- **Ventana nativa:** `tl-organizer gui` abre la misma interfaz en una ventana con pywebview; si hace falta algo más integrado, Tauri más adelante.
 - **Distribución:** ejecutables por sistema operativo con PyInstaller generados en GitHub Actions (Linux, Windows, macOS).
 - **Rendimiento:** un índice SQLite (caché, se puede regenerar) sobre los archivos por escenario, para buscar y filtrar rápido.
 
 ### Fase 6 — Herramientas para soportar motores nuevos
 
-- **Explorador de archivos** (`subahibi-es explorar` y luego en la GUI): lista el contenido de los contenedores que algún motor sabe abrir, vista
+- **Explorador de archivos** (`tl-organizer explorar` y luego en la GUI): lista el contenido de los contenedores que algún motor sabe abrir, vista
   hexadecimal y detección de cadenas (Shift-JIS, UTF-8, UTF-16) para ubicar "esto parece texto del juego" al empezar un motor nuevo.
 - **Asistente de perfil:** a partir de una carpeta, propone motor y genera el TOML (archivos requeridos, hash del exe, contenedores encontrados).
-- **`subahibi-es motor nuevo NOMBRE`:** genera el esqueleto de un plugin (paquete, entry point, clase `Motor`, perfil de ejemplo, prueba de contrato).
+- **`tl-organizer motor nuevo NOMBRE`:** genera el esqueleto de un plugin (paquete, entry point, clase `Motor`, perfil de ejemplo, prueba de contrato).
 - **Guía "Cómo escribir un motor"** con el BGI como ejemplo comentado.
 
 ### Fase 7 — Calidad de traducción
@@ -288,16 +288,14 @@ Decisiones abiertas de la fase 2:
 - **¿Dónde vive la traducción?** Hoy, en las hojas XLSX (cómodas, pero binarias: git no muestra diferencias y dos personas no pueden fusionar).
   Opciones: (a) seguir con XLSX y usar PO para colaborar; (b) archivos de texto por escenario como fuente de verdad y XLSX/PO como vistas.
   La (b) es mejor para la GUI y la colaboración, pero cambia la costumbre de trabajo: decidirlo antes de la fase 5.
-- **Nombre del proyecto** generalizado.
 
 Notas que dejó la fase 1:
 - Las opciones de `build` y los comandos sueltos de cada motor se registran en el mismo `argparse`: con dos motores que definan
   la misma opción (`--fuente`) habrá conflicto. Resolverlo en la fase 4 (prefijar por motor, o armar el parser después de saber el motor del proyecto).
 - Textos de la interfaz que todavía suponen japonés → español: columnas `japones`/`espanol`, etiquetas de la galería («tiene japonés»), mensajes
   de `exportar`. Van con los idiomas configurables de la fase 2.
-- El nombre del archivo de proyecto (`subahibi-es.json`) y de la carpeta de trabajo cambian con el nombre del proyecto (fase 2), con compatibilidad hacia atrás.
+- (Resuelto en la fase 2: el archivo de proyecto pasó a `tl-organizer.json` y la carpeta a `tl-organizer-trabajo/`; los nombres viejos se siguen reconociendo.)
 
-- **Nombre** del proyecto generalizado (fase 2).
 - **Licencia:** el núcleo es GPL-3.0-or-later; un plugin que importa el núcleo queda alcanzado por la GPL. Envolver herramientas externas por
   línea de comandos (`MotorExterno`) no tiene ese problema.
 - **Archivos cifrados por juego** (XP3 y otros): las claves salen de la copia del usuario o de perfiles; no se distribuye material del juego.
@@ -317,11 +315,11 @@ Notas que dejó la fase 1:
 - [ ] **Fase 2** — modelo de datos genérico *(en curso)*
   - [x] filas con claves genéricas (`original`/`traduccion`); encabezados de las hojas según los idiomas del proyecto (`init --idioma`);
         las hojas existentes se siguen leyendo y con japonés → español no cambia nada
-  - [x] `subahibi-es revisar`: controles generales + ganchos del motor (`marcadores`, `caracteres_invalidos`, `controles`); informe `revision.tsv`
+  - [x] `tl-organizer revisar`: controles generales + ganchos del motor (`marcadores`, `caracteres_invalidos`, `controles`); informe `revision.tsv`
   - [x] `text po-export` / `text po-import` (con `polib`), ida y vuelta probada sobre las 98 867 filas reales
   - [ ] contexto por fila (hablante, línea anterior/siguiente) — el motor BGI tiene que identificar el comando de nombre
   - [ ] almacenamiento por escenario como fuente de verdad (decisión abierta, ver sección 4)
-  - [ ] nombre del proyecto (decisión abierta)
+  - [x] nombre del proyecto: **tl-organizer** (paquete `tl_organizer`; `subahibi-es` queda como alias y los proyectos viejos se abren)
 - [ ] Fase 3 — kit de motores: `MotorTextoPlano`, tabla de cadenas, `MotorExterno`, contenedores, codificaciones, prueba de contrato
 - [ ] Fase 4 — Kirikiri y tercer motor, interfaz `Motor` v1
 - [ ] Fase 5 — API local y GUI web

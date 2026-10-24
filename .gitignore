@@ -15,6 +15,7 @@ env/
 .venv/
 venv/
 subahibi-es.json
+tl-organizer.json
 
 # material de terceros / binarios: nunca al repositorio
 parche de sakurano/

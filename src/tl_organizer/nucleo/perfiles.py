@@ -9,8 +9,8 @@
     [<motor>]     sección propia del motor: solo la lee y valida el motor
 
 Se buscan, en orden de prioridad (si un id se repite gana el primero que aparece):
-  1. las carpetas de $SUBAHIBI_ES_PERFILES (separadas por os.pathsep);
-  2. la carpeta del usuario: $XDG_CONFIG_HOME/subahibi-es/juegos (por defecto ~/.config/…) o %APPDATA%\\subahibi-es\\juegos;
+  1. las carpetas de $TL_ORGANIZER_PERFILES (separadas por os.pathsep);
+  2. la carpeta del usuario: $XDG_CONFIG_HOME/tl-organizer/juegos (por defecto ~/.config/…) o %APPDATA%\\tl-organizer\\juegos;
   3. los perfiles incluidos en cada motor (motores/<motor>/juegos/*.toml).
 """
 import glob
@@ -21,7 +21,7 @@ try:
 except ModuleNotFoundError:                  # Python 3.10
     import tomli as tomllib
 
-ENV = "SUBAHIBI_ES_PERFILES"
+ENV = "TL_ORGANIZER_PERFILES"
 SECCIONES = ("deteccion", "texto", "imagenes", "galeria", "jugable")     # las que lee el núcleo
 
 
@@ -94,7 +94,7 @@ def carpeta_de_usuario():
         base = os.environ.get("APPDATA") or os.path.join(os.path.expanduser("~"), "AppData", "Roaming")
     else:
         base = os.environ.get("XDG_CONFIG_HOME") or os.path.join(os.path.expanduser("~"), ".config")
-    return os.path.join(base, "subahibi-es", "juegos")
+    return os.path.join(base, "tl-organizer", "juegos")
 
 
 def carpetas():

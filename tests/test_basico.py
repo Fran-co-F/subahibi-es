@@ -6,16 +6,17 @@ import struct
 import pytest
 from PIL import Image
 
-from subahibi_es.motores.bgi import exe_patch
-from subahibi_es.motores.bgi import image
-from subahibi_es.motores.bgi.arc import Arc
-from subahibi_es.nucleo.galeria import index
+from tl_organizer.motores.bgi import exe_patch
+from tl_organizer.motores.bgi import image
+from tl_organizer.motores.bgi.arc import Arc
+from tl_organizer.nucleo.galeria import index
 
 
 @pytest.fixture(autouse=True)
 def _aislado(tmp_path, monkeypatch):
     """Ni los perfiles del usuario ni un proyecto forzado por variable de entorno afectan a las pruebas."""
-    monkeypatch.delenv("SUBAHIBI_ES_PERFILES", raising=False)
+    monkeypatch.delenv("TL_ORGANIZER_PERFILES", raising=False)
+    monkeypatch.delenv("TL_ORGANIZER_PROJECT", raising=False)
     monkeypatch.delenv("SUBAHIBI_ES_PROJECT", raising=False)
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config-usuario"))
     monkeypatch.setenv("APPDATA", str(tmp_path / "config-usuario"))
@@ -51,9 +52,9 @@ def test_estado_manual_gana(tmp_path):
 
 @pytest.mark.skipif(not os.environ.get("GAME_DIR"), reason="GAME_DIR no definido")
 def test_juego_real_sysgrp():
-    from subahibi_es.motores.bgi.images import export
+    from tl_organizer.motores.bgi.images import export
     import tempfile
-    out = os.path.join(tempfile.gettempdir(), "subahibi_es_test")
+    out = os.path.join(tempfile.gettempdir(), "tl_organizer_test")
     n, skipped = export.export_arc(os.path.join(os.environ["GAME_DIR"], "sysgrp.arc"), out)
     assert n == 338 and not skipped
 
@@ -61,7 +62,7 @@ def test_juego_real_sysgrp():
 def _escenario_sintetico(textos):
     """Escenario mínimo: cabecera, un push, un 'str' por texto y la tabla de cadenas."""
     import struct
-    from subahibi_es.motores.bgi import scn
+    from tl_organizer.motores.bgi import scn
     head_rest = struct.pack("<I", 0) + struct.pack("<I", 1) + b"main\0" + struct.pack("<I", 0)
     head = scn.MAGIC + struct.pack("<I", 4 + len(head_rest) + 0)
     head += head_rest
@@ -78,7 +79,7 @@ def _escenario_sintetico(textos):
 
 
 def test_escenario_ida_y_vuelta():
-    from subahibi_es.motores.bgi import scn
+    from tl_organizer.motores.bgi import scn
     data = _escenario_sintetico(["hola", "mundo"])
     sc = scn.parse(data)
     assert scn.serialize(sc) == data
@@ -93,7 +94,7 @@ def test_pagina_funciones_puras(tmp_path):
     node = shutil.which("node")
     if not node:
         pytest.skip("node no instalado")
-    from subahibi_es.nucleo.galeria import _page
+    from tl_organizer.nucleo.galeria import _page
     rows = [dict(n="SGX000000", g="SGX", w=2, h=1, st="sin_clasificar", note="", tr=False)]
     html = _page.render(rows, {"traducida": "T", "sin_clasificar": "S"}, {"traducida": "#000", "sin_clasificar": "#111"})
     js = html.split("<script>")[1].split("</script>")[0]
@@ -120,7 +121,7 @@ fs.writeFileSync(process.argv[3],makeZip([{name:'a.png',data:new Uint8Array([1,2
 
 
 def test_acentos_ida_y_vuelta():
-    from subahibi_es.motores.bgi.text import accents
+    from tl_organizer.motores.bgi.text import accents
     s = "¿Qué está pasando, señor Núñez? ¡Ándale! Pingüino, ÉL, ÍNDICE, ÓPERA, ÚLTIMO, ÜBER, Ñandú"
     raw = accents.encode(s)
     assert accents.decode(raw) == s
@@ -132,7 +133,7 @@ def test_acentos_ida_y_vuelta():
 def _escenario_con_textos(textos, cmd=0x140):
     """Escenario sintético: por cada texto, 'str' + un comando (por defecto 0x140 = mensaje)."""
     import struct
-    from subahibi_es.motores.bgi import scn
+    from tl_organizer.motores.bgi import scn
     head_rest = struct.pack("<I", 0) + struct.pack("<I", 1) + b"main\0" + struct.pack("<I", 0)
     head = scn.MAGIC + struct.pack("<I", 4 + len(head_rest)) + head_rest
     head += b"\0" * ((-len(head)) % 16)
@@ -147,9 +148,9 @@ def _escenario_con_textos(textos, cmd=0x140):
 
 
 def test_texto_exportar_e_importar():
-    from subahibi_es.motores.bgi import scn
-    from subahibi_es.motores.bgi.text import accents, export, extract, import_
-    from subahibi_es.nucleo import hojas
+    from tl_organizer.motores.bgi import scn
+    from tl_organizer.motores.bgi.text import accents, export, extract, import_
+    from tl_organizer.nucleo import hojas
     jp = _escenario_con_textos(["こんにちは", "さようなら"])
     rows = export.script_rows("prueba", jp)
     assert [r["tipo"] for r in rows] == ["mensaje", "mensaje"] and rows[0]["original"] == "こんにちは"
@@ -168,7 +169,7 @@ def test_texto_exportar_e_importar():
 
 
 def test_tsv_escapes(tmp_path):
-    from subahibi_es.nucleo import hojas as sheet
+    from tl_organizer.nucleo import hojas as sheet
     fila = dict(clave="a:00001", tipo="mensaje", original="x\ty\nz\\", traduccion="línea1\nlínea2", estado="traducido",
                 nota="", pos=12, hash="abcd1234")
     p = tmp_path / "a.tsv"
@@ -179,7 +180,7 @@ def test_tsv_escapes(tmp_path):
 
 def test_parche_viejo_zip_y_config(tmp_path, monkeypatch):
     import zipfile
-    from subahibi_es.motores.bgi import oldpatch
+    from tl_organizer.motores.bgi import oldpatch
     jp = _escenario_con_textos(["hola"])
     z = tmp_path / "parche.zip"
     with zipfile.ZipFile(z, "w") as zf:
@@ -196,8 +197,8 @@ def test_parche_viejo_zip_y_config(tmp_path, monkeypatch):
 
 def test_modo_utf8_reescribe_todo():
     """En modo UTF-8 también las cadenas japonesas sin traducir pasan de Shift-JIS a UTF-8."""
-    from subahibi_es.motores.bgi import scn
-    from subahibi_es.motores.bgi.text import export, extract, import_
+    from tl_organizer.motores.bgi import scn
+    from tl_organizer.motores.bgi.text import export, extract, import_
     jp = _escenario_con_textos(["こんにちは", "さようなら"])
     rows = export.script_rows("prueba", jp)
     rows[0]["traduccion"], rows[0]["estado"] = "¡Hola, señor! ñé", "traducido"
@@ -212,12 +213,12 @@ def test_modo_utf8_reescribe_todo():
 
 
 def test_exe_utf8_desvia_la_entrada():
-    from subahibi_es.motores.bgi import exe_patch
+    from tl_organizer.motores.bgi import exe_patch
     assert "utf8" in exe_patch.patch.__code__.co_varnames
 
 
 def test_wrap_corta_en_palabras():
-    from subahibi_es.nucleo import wrap
+    from tl_organizer.nucleo import wrap
     fits = wrap.make_fits(max_chars=20)
     t = "El veloz murciélago hindú comía feliz cardillo"
     r = wrap.wrap_text(t, fits)
@@ -233,7 +234,7 @@ def test_wrap_corta_en_palabras():
 
 def test_nombre_de_fuente_configurable():
     import pytest
-    from subahibi_es.motores.bgi import exe_patch
+    from tl_organizer.motores.bgi import exe_patch
     assert exe_patch.font_slot("Lune") == b"Lune" + b"\0" * 12
     for malo in ("", "NombreDeFuenteDemasiadoLargo", "Fuente ñ"):
         with pytest.raises(exe_patch.PatchError):
@@ -244,7 +245,7 @@ def test_enlaces_con_respaldo(tmp_path, monkeypatch):
     """Sin permiso para enlaces simbólicos (Windows normal) se usa enlace duro y, si tampoco, copia."""
     import os as _os
     import shutil
-    from subahibi_es.nucleo import enlaces as build
+    from tl_organizer.nucleo import enlaces as build
     src = tmp_path / "datos.arc"
     src.write_bytes(b"x" * 100)
     assert build._link(str(src), str(tmp_path / "a")) in ("enlace simbólico", "enlace duro")
@@ -262,11 +263,11 @@ REQUERIDOS = ("BGI.exe", "sysgrp.arc", "sysprg.arc", "system.arc", "data01101.ar
 
 
 def _perfil(tmp_path, monkeypatch, texto, nombre="falso.toml"):
-    """Escribe un perfil de juego en una carpeta de $SUBAHIBI_ES_PERFILES."""
+    """Escribe un perfil de juego en una carpeta de $TL_ORGANIZER_PERFILES."""
     d = tmp_path / "perfiles"
     d.mkdir(exist_ok=True)
     (d / nombre).write_text(texto, encoding="utf-8")
-    monkeypatch.setenv("SUBAHIBI_ES_PERFILES", str(d))
+    monkeypatch.setenv("TL_ORGANIZER_PERFILES", str(d))
     return d / nombre
 
 
@@ -292,14 +293,14 @@ version = "falso 1.0"
 
 
 def test_init_valida_y_crea_el_proyecto(tmp_path, monkeypatch):
-    from subahibi_es.nucleo import proyecto as project
+    from tl_organizer.nucleo import proyecto as project
     g = _juego_falso(tmp_path, monkeypatch)
     proj, creado = project.init(str(g))
     assert creado and proj.cfg["perfil"] == "falso" and proj.cfg["motor"] == "bgi" and proj.version == "falso 1.0"
     for name in ("originales", "texto", "traducidas", "indice", "backup", "salida"):
         assert (g / project.WORK / project.SUBDIRS[name]).is_dir()
     assert (g / project.WORK / "backup" / "BGI.exe").read_bytes() == b"MZ-falso"      # respaldo del exe original
-    assert (g / "subahibi-es.json").exists() and (g / project.WORK / "imagenes" / "estado.tsv").exists()
+    assert (g / "tl-organizer.json").exists() and (g / project.WORK / "imagenes" / "estado.tsv").exists()
     sub = g / "Script"
     sub.mkdir()
     assert project.find(str(sub)).root == str(g)                  # se encuentra desde una subcarpeta
@@ -312,7 +313,7 @@ def test_init_valida_y_crea_el_proyecto(tmp_path, monkeypatch):
 
 
 def test_init_rechaza_lo_que_no_es_el_juego(tmp_path):
-    from subahibi_es.nucleo import proyecto as project
+    from tl_organizer.nucleo import proyecto as project
     vacia = tmp_path / "otra"
     vacia.mkdir()
     with pytest.raises(project.ProjectError) as e:
@@ -325,18 +326,18 @@ def test_init_rechaza_lo_que_no_es_el_juego(tmp_path):
 
 
 def test_reset_no_toca_el_juego(tmp_path, monkeypatch):
-    from subahibi_es.nucleo import proyecto as project
+    from tl_organizer.nucleo import proyecto as project
     g = _juego_falso(tmp_path, monkeypatch)
     proj, _ = project.init(str(g))
     project.reset(proj)                                           # solo el JSON
-    assert not (g / "subahibi-es.json").exists() and (g / project.WORK).is_dir() and (g / "BGI.exe").exists()
+    assert not (g / "tl-organizer.json").exists() and (g / project.WORK).is_dir() and (g / "BGI.exe").exists()
     proj, _ = project.init(str(g))
     project.reset(proj, todo=True)                                # JSON y carpeta de trabajo; el juego queda
     assert not (g / project.WORK).exists() and (g / "BGI.exe").exists() and (g / "sysgrp.arc").exists()
 
 
 def test_instalar_y_desinstalar(tmp_path, monkeypatch):
-    from subahibi_es.nucleo import flujo as workflow, proyecto as project
+    from tl_organizer.nucleo import flujo as workflow, proyecto as project
     g = _juego_falso(tmp_path, monkeypatch)
     proj, _ = project.init(str(g))
     salida = g / project.WORK / "salida"
@@ -355,18 +356,18 @@ def test_instalar_y_desinstalar(tmp_path, monkeypatch):
 
 
 def test_cli_init_estado_reset(tmp_path, monkeypatch, capsys):
-    from subahibi_es import cli
-    from subahibi_es.nucleo import proyecto as project
+    from tl_organizer import cli
+    from tl_organizer.nucleo import proyecto as project
     g = _juego_falso(tmp_path, monkeypatch)
     monkeypatch.chdir(g)
-    assert cli.main(["init"]) == 0 and (g / "subahibi-es.json").exists()
+    assert cli.main(["init"]) == 0 and (g / "tl-organizer.json").exists()
     assert "juego detectado" in capsys.readouterr().out
-    monkeypatch.chdir(g / "subahibi-es-trabajo")                       # los comandos funcionan desde una subcarpeta
+    monkeypatch.chdir(g / "tl-organizer-trabajo")                       # los comandos funcionan desde una subcarpeta
     assert project.find().root == str(g)
     with pytest.raises(SystemExit):
         cli.main(["init"])                                             # ya hay un proyecto
     assert cli.main(["reset", "--todo", "--si"]) == 0
-    assert not (g / "subahibi-es.json").exists() and not (g / "subahibi-es-trabajo").exists() and (g / "BGI.exe").exists()
+    assert not (g / "tl-organizer.json").exists() and not (g / "tl-organizer-trabajo").exists() and (g / "BGI.exe").exists()
     monkeypatch.chdir(g)
     with pytest.raises(SystemExit) as e:
         cli.main(["build"])                                            # sin proyecto, mensaje claro
@@ -377,11 +378,11 @@ def test_parche_viejo_se_guarda_relativo(tmp_path, monkeypatch):
     """Si el parche viejo está dentro del proyecto, la ruta se guarda relativa y sobrevive a mover la carpeta."""
     import json
     import shutil
-    from subahibi_es.nucleo import proyecto as project
+    from tl_organizer.nucleo import proyecto as project
     g = _juego_falso(tmp_path, monkeypatch)
     (g / "parche.zip").write_bytes(b"x")
     proj, _ = project.init(str(g), str(g / "parche.zip"))
-    assert json.load(open(g / "subahibi-es.json", encoding="utf-8"))["parche_viejo"] == "parche.zip"
+    assert json.load(open(g / "tl-organizer.json", encoding="utf-8"))["parche_viejo"] == "parche.zip"
     assert proj.parche_viejo == str(g / "parche.zip")
     nuevo = tmp_path / "movido"
     shutil.move(str(g), str(nuevo))
@@ -393,7 +394,7 @@ def test_parche_viejo_se_guarda_relativo(tmp_path, monkeypatch):
 
 
 def test_estado_tsv_arranca_vacio(tmp_path, monkeypatch):
-    from subahibi_es.nucleo import proyecto as project
+    from tl_organizer.nucleo import proyecto as project
     g = _juego_falso(tmp_path, monkeypatch)
     proj, _ = project.init(str(g))
     assert index.read_status(proj.estado_tsv) == []                          # solo comentarios: ninguna regla propia
@@ -402,21 +403,21 @@ def test_estado_tsv_arranca_vacio(tmp_path, monkeypatch):
 
 def test_export_no_crea_hojas_vacias(tmp_path, monkeypatch):
     pytest.importorskip("openpyxl")
-    from subahibi_es.motores.bgi.text import export
-    from subahibi_es.nucleo import texto
+    from tl_organizer.motores.bgi.text import export
+    from tl_organizer.nucleo import texto
     con = _escenario_con_textos(["hola", "mundo"])
     sin = _escenario_con_textos(["cualquier_nombre"], cmd=0x1a1)     # una cadena que no es texto (nombre de archivo, etc.)
     fuente = [(g, n, export.script_rows(n, d)) for g, n, d in [("a", "con_texto", con), ("a", "sin_texto", sin), ("b", "solo_vacio", sin)]]
     r = texto.exportar(fuente, str(tmp_path / "out"))
     assert r["scripts"] == 1 and sorted(r["sin_texto"]) == ["sin_texto", "solo_vacio"]
     assert sorted(f.name for f in (tmp_path / "out").iterdir()) == ["a.xlsx"]     # b.xlsx no existe: no tenía ninguna hoja con filas
-    from subahibi_es.nucleo import hojas as sheet
+    from tl_organizer.nucleo import hojas as sheet
     assert list(sheet.read_xlsx(str(tmp_path / "out" / "a.xlsx"))) == ["con_texto"]
 
 
 def test_alineacion_dudosa_por_correlacion_de_largos():
     import random
-    from subahibi_es.nucleo import alineacion as align
+    from tl_organizer.nucleo import alineacion as align
     random.seed(7)
     jp = [random.randint(3, 120) for _ in range(300)]
     es = [int(x * 2.4) + random.randint(-4, 4) for x in jp]               # bien alineado: largos proporcionales
@@ -429,7 +430,7 @@ def test_alineacion_dudosa_por_correlacion_de_largos():
 
 
 def test_precarga_quita_el_tab_final(tmp_path, monkeypatch):
-    from subahibi_es.motores.bgi.text import export
+    from tl_organizer.motores.bgi.text import export
     jp = _escenario_con_textos(["こんにちは"])
     old = _escenario_con_textos(["Hola\t"])                               # el parche viejo agrega un TAB final
     rows = export.script_rows("p", jp, old)
@@ -438,7 +439,7 @@ def test_precarga_quita_el_tab_final(tmp_path, monkeypatch):
 
 def test_estado_por_archivo_y_por_escenario(tmp_path, monkeypatch):
     pytest.importorskip("openpyxl")
-    from subahibi_es.nucleo import flujo as workflow, hojas as sheet, proyecto as project
+    from tl_organizer.nucleo import flujo as workflow, hojas as sheet, proyecto as project
     g = _juego_falso(tmp_path, monkeypatch)
     proj, _ = project.init(str(g))
     fila = lambda i, st: dict(clave=f"x:{i:05d}", tipo="mensaje", original="j", traduccion="e" if st != "sin traducir" else "",
@@ -465,8 +466,8 @@ def test_estado_por_archivo_y_por_escenario(tmp_path, monkeypatch):
 
 def test_perfil_incluido_conserva_los_datos_del_exe():
     """El perfil TOML de la 15th reproduce exactamente las direcciones que antes estaban fijas en exe_patch.py."""
-    from subahibi_es import motores
-    from subahibi_es.nucleo import perfiles
+    from tl_organizer import motores
+    from tl_organizer.nucleo import perfiles
     perfil = perfiles.obtener("subahibi-15th")
     m = motores.crear(perfil)
     b = m.builds["993e9803a4335ff752dd7b4fd7b5036c3200c88c74fbde05d29b5123be5bd29c"]
@@ -479,13 +480,13 @@ def test_perfil_incluido_conserva_los_datos_del_exe():
 
 
 def test_perfil_del_usuario_gana_y_errores_claros(tmp_path, monkeypatch):
-    from subahibi_es.nucleo import perfiles
+    from tl_organizer.nucleo import perfiles
     # un perfil del usuario con el mismo id reemplaza al incluido
-    d = tmp_path / "config-usuario" / "subahibi-es" / "juegos"
+    d = tmp_path / "config-usuario" / "tl-organizer" / "juegos"
     d.mkdir(parents=True)
     (d / "mio.toml").write_text('id = "subahibi-15th"\nnombre = "Mi versión"\nmotor = "bgi"\n', encoding="utf-8")
     assert perfiles.obtener("subahibi-15th").nombre == "Mi versión"
-    # $SUBAHIBI_ES_PERFILES tiene más prioridad que la carpeta del usuario
+    # $TL_ORGANIZER_PERFILES tiene más prioridad que la carpeta del usuario
     _perfil(tmp_path, monkeypatch, 'id = "subahibi-15th"\nnombre = "De la variable"\nmotor = "bgi"\n')
     assert perfiles.obtener("subahibi-15th").nombre == "De la variable"
     with pytest.raises(perfiles.PerfilError, match="no encuentro el perfil"):
@@ -499,8 +500,8 @@ def test_perfil_del_usuario_gana_y_errores_claros(tmp_path, monkeypatch):
 
 
 def test_motor_desconocido_y_seccion_mal_escrita(tmp_path, monkeypatch):
-    from subahibi_es import motores
-    from subahibi_es.nucleo import perfiles
+    from tl_organizer import motores
+    from tl_organizer.nucleo import perfiles
     with pytest.raises(motores.MotorError, match="motor desconocido «nada»"):
         motores.crear(perfiles.Perfil({"id": "x", "nombre": "x", "motor": "nada"}))
     with pytest.raises(motores.MotorError, match="falta «version»"):
@@ -510,7 +511,7 @@ def test_motor_desconocido_y_seccion_mal_escrita(tmp_path, monkeypatch):
 
 
 def test_init_con_varios_perfiles_muestra_el_mas_parecido(tmp_path, monkeypatch):
-    from subahibi_es.nucleo import proyecto as project
+    from tl_organizer.nucleo import proyecto as project
     _perfil(tmp_path, monkeypatch, 'id = "otro"\nnombre = "Otro juego"\nmotor = "bgi"\n[deteccion]\nrequeridos = ["otro.dat"]\n')
     g = tmp_path / "carpeta"
     g.mkdir()
@@ -527,16 +528,19 @@ def test_init_con_varios_perfiles_muestra_el_mas_parecido(tmp_path, monkeypatch)
 def test_proyecto_viejo_sin_perfil_se_sigue_abriendo(tmp_path):
     """Los proyectos creados antes de los perfiles guardaban la versión del exe en «motor» y no tenían «perfil»."""
     import json
-    from subahibi_es.nucleo import proyecto as project
-    (tmp_path / project.NAME).write_text(json.dumps({"version_del_proyecto": 1, "motor": "1.685.3 (15th Anniversary, x86_64)",
-                                                     "parche_viejo": None}), encoding="utf-8")
-    proj = project.find(str(tmp_path))
+    from tl_organizer.nucleo import proyecto as project
+    (tmp_path / "subahibi-es.json").write_text(json.dumps({"version_del_proyecto": 1,          # el nombre anterior de la herramienta
+                                                           "motor": "1.685.3 (15th Anniversary, x86_64)", "parche_viejo": None}),
+                                               encoding="utf-8")
+    (tmp_path / "subahibi-es-trabajo" / "texto").mkdir(parents=True)
+    proj = project.find(str(tmp_path / "subahibi-es-trabajo" / "texto"))
     assert proj.perfil.id == "subahibi-15th" and proj.motor.nombre == "bgi" and proj.version.startswith("1.685.3")
+    assert proj.json_path.endswith("subahibi-es.json") and proj.dir("texto") == str(tmp_path / "subahibi-es-trabajo" / "texto")
 
 
 def test_jugable_nunca_enlaza_el_ejecutable(tmp_path):
     """Si el perfil pidiera enlazar los .exe, el del juego se omite: el exe parcheado se escribiría a través del enlace."""
-    from subahibi_es.nucleo import enlaces, perfiles
+    from tl_organizer.nucleo import enlaces, perfiles
     g, out = tmp_path / "g", tmp_path / "out"
     g.mkdir(); out.mkdir()
     for f in ("BGI.exe", "BHVC.exe", "a.arc", "nota.txt"):
@@ -548,7 +552,7 @@ def test_jugable_nunca_enlaza_el_ejecutable(tmp_path):
 
 
 # Un motor mínimo de prueba, cargado como plugin (entry point): solo sabe texto.
-from subahibi_es.motores.base import Motor, TEXTO  # noqa: E402
+from tl_organizer.motores.base import Motor, TEXTO  # noqa: E402
 
 
 class MotorDePrueba(Motor):
@@ -576,8 +580,8 @@ def test_plugin_de_motor_con_su_perfil_hace_todo_el_flujo(tmp_path, monkeypatch)
     """Un motor nuevo = una clase + un entry point + un perfil TOML; el núcleo hace el resto (init, exportar, build, estado)."""
     pytest.importorskip("openpyxl")
     from importlib.metadata import EntryPoint
-    from subahibi_es import motores
-    from subahibi_es.nucleo import flujo, hojas, proyecto as project
+    from tl_organizer import motores
+    from tl_organizer.nucleo import flujo, hojas, proyecto as project
     ep = EntryPoint("prueba", f"{__name__}:MotorDePrueba", motores.GRUPO)
     monkeypatch.setattr(motores, "entry_points", lambda group: [ep] if group == motores.GRUPO else [])
     assert "prueba" in motores.disponibles()
@@ -610,7 +614,7 @@ def _fila(i, original, traduccion="", estado="traducido", tipo="mensaje", nota="
 
 def test_idiomas_del_proyecto_dan_los_encabezados(tmp_path, monkeypatch):
     pytest.importorskip("openpyxl")
-    from subahibi_es.nucleo import hojas, proyecto as project
+    from tl_organizer.nucleo import hojas, proyecto as project
     g = _juego_falso(tmp_path, monkeypatch)
     proj, _ = project.init(str(g), destino="en")
     assert proj.idiomas == ("ja", "en") and hojas.encabezado(proj.idiomas)[2:4] == ["japones", "ingles"]
@@ -630,9 +634,9 @@ def test_idiomas_del_proyecto_dan_los_encabezados(tmp_path, monkeypatch):
 
 
 def test_revisar_controles_generales():
-    from subahibi_es.nucleo import revisar as rv
-    from subahibi_es.motores.bgi import MotorBGI
-    from subahibi_es.nucleo import perfiles, wrap
+    from tl_organizer.nucleo import revisar as rv
+    from tl_organizer.motores.bgi import MotorBGI
+    from tl_organizer.nucleo import perfiles, wrap
     m = MotorBGI(perfiles.Perfil({"id": "x", "nombre": "x", "motor": "bgi"}))
     ctx = rv.Contexto(idiomas=("ja", "es"), motor=m, fits=wrap.make_fits(max_chars=20), max_lineas=2)
     filas = [
@@ -666,8 +670,8 @@ def test_revisar_controles_generales():
 
 def test_revisar_comando_escribe_el_informe(tmp_path, monkeypatch, capsys):
     pytest.importorskip("openpyxl")
-    from subahibi_es import cli
-    from subahibi_es.nucleo import hojas, proyecto as project
+    from tl_organizer import cli
+    from tl_organizer.nucleo import hojas, proyecto as project
     g = _juego_falso(tmp_path, monkeypatch)
     project.init(str(g))
     hojas.write_xlsx(str(g / project.WORK / "texto" / "data01.xlsx"),
@@ -683,7 +687,7 @@ def test_revisar_comando_escribe_el_informe(tmp_path, monkeypatch, capsys):
 def test_po_ida_y_vuelta(tmp_path, monkeypatch):
     pytest.importorskip("openpyxl")
     polib = pytest.importorskip("polib")
-    from subahibi_es.nucleo import hojas, po
+    from tl_organizer.nucleo import hojas, po
     textos = tmp_path / "texto"
     textos.mkdir()
     hojas.write_xlsx(str(textos / "data01.xlsx"), {"esc": [

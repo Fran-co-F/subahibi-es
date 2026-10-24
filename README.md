@@ -1,7 +1,12 @@
-# subahibi-es
+# tl-organizer
 
-Herramientas para traducir **Subarashiki Hibi 15th Anniversary** (motor Ethornell / BGI, v1.685.3) al español: exportan el texto a hojas de cálculo y las
-imágenes de interfaz a una galería, y arman los archivos que hay que copiar al juego.
+Herramienta para organizar la traducción de novelas visuales: exporta el texto y las imágenes de interfaz del juego, lleva la traducción
+en archivos de texto (aptos para git) con vistas en hojas de cálculo y en PO, revisa la calidad y arma los archivos que hay que copiar al juego.
+Los motores son plugins y cada juego se describe con un perfil (ver [Perfiles de juego y motores](#perfiles-de-juego-y-motores)).
+
+Hoy soporta el motor **Ethornell / BGI**, con el perfil de **Subarashiki Hibi 15th Anniversary** (v1.685.3), el juego para el que nació
+(como *subahibi-es*). La guía de abajo usa ese juego de ejemplo. El comando `subahibi-es` sigue funcionando como alias de `tl-organizer`, y los
+proyectos creados con el nombre anterior (`subahibi-es.json`, `subahibi-es-trabajo/`) se siguen abriendo.
 
 Licencia: **GPL-3.0-or-later**. Este repositorio contiene **solo herramientas**: no incluye imágenes, audio, exe, fuentes ni texto del juego, ni la
 traducción. Todo se genera en tu equipo a partir de **tu copia del juego**. Hace falta una copia legítima.
@@ -39,14 +44,14 @@ Abrí una terminal **en la carpeta de instalación del juego** y ejecutá:
 
 ```
 cd "C:\Juegos\Subarashiki Hibi 15th"          # o la ruta de tu instalación
-subahibi-es init --parche-viejo "C:\Descargas\parche_espanol.zip"
+tl-organizer init --parche-viejo "C:\Descargas\parche_espanol.zip"
 ```
-(El `--parche-viejo` es opcional; se puede agregar después repitiendo `init --parche-viejo ARCHIVO.zip`.) También funciona `subahibi-es init RUTA` desde otro lado.
+(El `--parche-viejo` es opcional; se puede agregar después repitiendo `init --parche-viejo ARCHIVO.zip`.) También funciona `tl-organizer init RUTA` desde otro lado.
 
-Qué hace: **comprueba que la carpeta sea el juego** (un `BGI.exe` de una versión conocida y los `.arc` esperados; si no, te dice qué falta), crea `subahibi-es.json`
-(el archivo que *es* el proyecto) y estas carpetas dentro de `subahibi-es-trabajo/`, y guarda una copia del `BGI.exe` original:
+Qué hace: **comprueba que la carpeta sea el juego** (un `BGI.exe` de una versión conocida y los `.arc` esperados; si no, te dice qué falta), crea `tl-organizer.json`
+(el archivo que *es* el proyecto) y estas carpetas dentro de `tl-organizer-trabajo/`, y guarda una copia del `BGI.exe` original:
 
-| Carpeta (dentro de `subahibi-es-trabajo/`) | Para qué sirve |
+| Carpeta (dentro de `tl-organizer-trabajo/`) | Para qué sirve |
 |---|---|
 | `texto/` | Las hojas Excel/LibreOffice donde se traduce. |
 | `imagenes/traducidas/` | Las imágenes de interfaz ya traducidas (PNG o BMP). |
@@ -57,12 +62,12 @@ Qué hace: **comprueba que la carpeta sea el juego** (un `BGI.exe` de una versi�
 | `salida/` | **Lo que hay que copiar al juego** (lo crea `build`). |
 
 Desde ese momento **todos los comandos funcionan sin pasar rutas**, ejecutados desde la carpeta del juego o desde cualquiera de sus subcarpetas.
-`subahibi-es estado` te muestra en qué punto estás (`-v` desglosa por archivo y `-vv` por escenario, con el porcentaje listo de cada uno; «listo» = `traducido` + `del parche`, lo que `build` aplica por defecto).
+`tl-organizer estado` te muestra en qué punto estás (`-v` desglosa por archivo y `-vv` por escenario, con el porcentaje listo de cada uno; «listo» = `traducido` + `del parche`, lo que `build` aplica por defecto).
 
 ## 3. Exportar — `exportar`
 
 ```
-subahibi-es exportar
+tl-organizer exportar
 ```
 Hace todo el volcado sin que tengas que crear nada:
 1. Saca las **imágenes de interfaz** del juego a PNG (`originales/`).
@@ -90,16 +95,16 @@ Abrí las hojas de `texto/` con LibreOffice, Excel o Google Sheets. Cada fila es
 
 ### O con una herramienta de traducción (Poedit, OmegaT, Weblate, Lokalize…)
 ```
-subahibi-es text po-export      # un .po por hoja en subahibi-es-trabajo/po/
+tl-organizer text po-export      # un .po por hoja en tl-organizer-trabajo/po/
 … traducís con la herramienta …
-subahibi-es text po-import      # vuelve a las hojas (copia .bak de cada hoja la primera vez)
+tl-organizer text po-import      # vuelve a las hojas (copia .bak de cada hoja la primera vez)
 ```
 Cada entrada lleva la clave como contexto, el original y la traducción; las filas `revisar` salen marcadas como *dudosas* (fuzzy).
 Al importar: una entrada dudosa queda `revisar`; una traducción nueva o corregida queda `traducido`; una que no cambió conserva su estado;
 una entrada vacía no borra nada. Hace falta `pip install -e ".[po]"`.
 
 ### Las imágenes
-Abrí `subahibi-es-trabajo/imagenes/indice/index.html` en el navegador (doble clic). Es una galería con las imágenes originales y su estado (traducida, pendiente, a decidir…):
+Abrí `tl-organizer-trabajo/imagenes/indice/index.html` en el navegador (doble clic). Es una galería con las imágenes originales y su estado (traducida, pendiente, a decidir…):
 - Cada tarjeta tiene un **selector de estado** y una nota.
 - **Arrastrá tus imágenes traducidas** a la página (se asignan por nombre de archivo, o soltándolas sobre una tarjeta). Tienen que tener **el mismo nombre y el mismo tamaño** que el original; la página avisa si no.
 - **Guardar imágenes…** las escribe en una carpeta (elegí `imagenes/traducidas/`; en Chrome/Edge) o descarga un `.zip` (descomprimilo ahí).
@@ -111,15 +116,15 @@ Abrí `subahibi-es-trabajo/imagenes/indice/index.html` en el navegador (doble cl
 `text wrap` inserta saltos en los espacios para que ninguna línea pase de un ancho:
 
 ```
-subahibi-es text wrap --max-caracteres 44 --max-lineas 3
-subahibi-es build
+tl-organizer text wrap --max-caracteres 44 --max-lineas 3
+tl-organizer build
 ```
 
 - **Cerrá las hojas** en Excel/LibreOffice antes de correrlo: las reescribe (y si las tenés abiertas, lo que guardes después pisa el resultado).
 - **Antes de la primera corrida** deja una copia `data01101.xlsx.bak` al lado de cada hoja. Esa copia se hace una sola vez, así que siempre es la versión de **antes del primer wrap**.
   Para volver atrás, copiala encima de la hoja.
 - **Repetirlo es seguro** con el mismo ancho: los saltos que ya hay se respetan y solo se cortan las líneas nuevas o demasiado largas. Sirve para volver a pasarlo después de traducir más filas.
-- **Para cambiar el ancho, usá `--reflow`:** `subahibi-es text wrap --max-caracteres 38 --reflow`. Sin `--reflow` se respetan los saltos de la corrida anterior y las líneas quedan desparejas
+- **Para cambiar el ancho, usá `--reflow`:** `tl-organizer text wrap --max-caracteres 38 --reflow`. Sin `--reflow` se respetan los saltos de la corrida anterior y las líneas quedan desparejas
   (por ejemplo una palabra suelta); con `--reflow` se descartan **todos** los saltos manuales —también los que puso quien traducía a propósito, como versos— y se corta de nuevo desde cero.
 - Solo toca los mensajes con español y estado `traducido`, `del parche` o `revisar` (`--estados` para cambiarlo). Con `--max-lineas M` no cambia nada extra: solo anota en `nota` los textos que pasen de M líneas.
 - ¿No sabés el ancho? Medilo en el juego: tomá una línea que llene la ventana y contá los caracteres, o usá `--ancho PX --fuente ARCHIVO.ttf --tamano PX` para medir en píxeles con la fuente del juego.
@@ -127,10 +132,10 @@ subahibi-es build
 ## 5b. Control de calidad — `revisar` (opcional)
 
 ```
-subahibi-es revisar                                   # todo lo que tiene traducción
-subahibi-es revisar --max-caracteres 44 --max-lineas 3 --solo largo,lineas
+tl-organizer revisar                                   # todo lo que tiene traducción
+tl-organizer revisar --max-caracteres 44 --max-lineas 3 --solo largo,lineas
 ```
-Revisa las filas `traducido`, `del parche` y `revisar` y muestra un resumen; el informe completo queda en `subahibi-es-trabajo/revision.tsv`
+Revisa las filas `traducido`, `del parche` y `revisar` y muestra un resumen; el informe completo queda en `tl-organizer-trabajo/revision.tsv`
 (se abre con LibreOffice/Excel). Sale con error si hay **errores** (cosas que se verán mal), no por los avisos. No modifica las hojas.
 
 | Problema | Qué es |
@@ -149,35 +154,35 @@ Revisa las filas `traducido`, `del parche` y `revisar` y muestra un resumen; el 
 ## 6. Armar el parche — `build`
 
 ```
-subahibi-es build
+tl-organizer build
 ```
-Crea en `subahibi-es-trabajo/salida/` **exactamente lo que hay que copiar al juego**: el `BGI.exe` parcheado, los escenarios con tu texto, las imágenes traducidas y los
+Crea en `tl-organizer-trabajo/salida/` **exactamente lo que hay que copiar al juego**: el `BGI.exe` parcheado, los escenarios con tu texto, las imágenes traducidas y los
 archivos sueltos del parche viejo. La carpeta `salida/` se rehace entera cada vez. Si aparece «N filas no se aplicaron por su estado», son las `revisar`/`sin traducir`;
-para probar con las `revisar` incluidas: `subahibi-es build --estados "traducido,del parche,revisar"`.
+para probar con las `revisar` incluidas: `tl-organizer build --estados "traducido,del parche,revisar"`.
 
 ## 7. Probar — `instalar` / `desinstalar`
 
 ```
-subahibi-es instalar         # copia salida/ sobre el juego (guarda copia de lo que pisa)
+tl-organizer instalar         # copia salida/ sobre el juego (guarda copia de lo que pisa)
 … jugás …
-subahibi-es desinstalar      # deja el juego exactamente como estaba
+tl-organizer desinstalar      # deja el juego exactamente como estaba
 ```
 Con `instalar` el juego queda **en español** (el `BGI.exe` y los archivos sueltos pasan a ser los del parche). `desinstalar` borra lo agregado y restaura lo que se pisó;
 sigue funcionando con el parche instalado, porque el `BGI.exe` original se toma del respaldo. En Wine: `env WINEPREFIX=… wine BGI.exe` desde la carpeta del juego.
 
-*Sin tocar la instalación:* `subahibi-es build --jugable` arma `subahibi-es-trabajo/jugable/`, una carpeta de prueba completa con enlaces a los archivos del juego, para ejecutarla aparte.
+*Sin tocar la instalación:* `tl-organizer build --jugable` arma `tl-organizer-trabajo/jugable/`, una carpeta de prueba completa con enlaces a los archivos del juego, para ejecutarla aparte.
 
 ## 8. Entregar el parche a otras personas
 
-Comprimí **el contenido de `subahibi-es-trabajo/salida/`** (no la carpeta en sí) en un `.zip`. Quien lo reciba lo descomprime **sobre la carpeta de instalación de su juego**
+Comprimí **el contenido de `tl-organizer-trabajo/salida/`** (no la carpeta en sí) en un `.zip`. Quien lo reciba lo descomprime **sobre la carpeta de instalación de su juego**
 (aceptando reemplazar `BGI.exe`) e instala la fuente. Para volver al original, le alcanza con restaurar su `BGI.exe` y borrar las carpetas `Script`, `Graphic`, `Sound` y `Voice` agregadas
 (si guarda una copia del `BGI.exe` original antes de pisarlo, mejor).
 
 ## 9. Limpiar — `reset`
 
 ```
-subahibi-es reset            # borra el proyecto (subahibi-es.json); la carpeta de trabajo se conserva
-subahibi-es reset --todo     # borra también subahibi-es-trabajo/ (pide confirmación; --si para no preguntar)
+tl-organizer reset            # borra el proyecto (tl-organizer.json); la carpeta de trabajo se conserva
+tl-organizer reset --todo     # borra también tl-organizer-trabajo/ (pide confirmación; --si para no preguntar)
 ```
 `reset` **nunca toca los archivos del juego**. Si el parche está instalado, primero hay que `desinstalar` (o forzar con `--forzar`).
 
@@ -212,17 +217,17 @@ subahibi-es reset --todo     # borra también subahibi-es-trabajo/ (pide confirm
 Los comandos de la guía usan el proyecto. Estos hacen una sola cosa y aceptan rutas explícitas (con proyecto, las rutas por defecto salen de él):
 
 ```
-subahibi-es patch-exe BGI.exe BGI_es.exe [--fuente NOMBRE] [--sin-fuente] [--sin-proporcional] [--katakana]
-subahibi-es patch-exe --verify BGI.exe          # versión conocida y si ya está parcheado
-subahibi-es images export [CARPETA_DEL_JUEGO] [SALIDA] [--arc sysgrp …]      # .arc → PNG
-subahibi-es images index [ORIGINALES] [TRADUCIDAS] [SALIDA] [--estado TSV] [--ocr]
-subahibi-es images import [ORIGEN] [CARPETA_DEL_JUEGO] [SALIDA]               # coloca imágenes traducidas en Graphic/CVTD
-subahibi-es text export [CARPETA_DEL_JUEGO] [SALIDA] [--parche-viejo ZIP] [--tsv]
-subahibi-es text import [CARPETA_DEL_JUEGO] [SALIDA] [HOJAS…] [--estados "traducido,del parche,revisar"]
-subahibi-es text po-export [--salida CARPETA] [--estados …]   /   subahibi-es text po-import [ARCHIVOS.po…]
-subahibi-es text wrap [HOJAS…] --max-caracteres N [--max-lineas M] [--ancho PX --fuente TTF --tamano PX] [--reflow] [--salida CARPETA]
+tl-organizer patch-exe BGI.exe BGI_es.exe [--fuente NOMBRE] [--sin-fuente] [--sin-proporcional] [--katakana]
+tl-organizer patch-exe --verify BGI.exe          # versión conocida y si ya está parcheado
+tl-organizer images export [CARPETA_DEL_JUEGO] [SALIDA] [--arc sysgrp …]      # .arc → PNG
+tl-organizer images index [ORIGINALES] [TRADUCIDAS] [SALIDA] [--estado TSV] [--ocr]
+tl-organizer images import [ORIGEN] [CARPETA_DEL_JUEGO] [SALIDA]               # coloca imágenes traducidas en Graphic/CVTD
+tl-organizer text export [CARPETA_DEL_JUEGO] [SALIDA] [--parche-viejo ZIP] [--tsv]
+tl-organizer text import [CARPETA_DEL_JUEGO] [SALIDA] [HOJAS…] [--estados "traducido,del parche,revisar"]
+tl-organizer text po-export [--salida CARPETA] [--estados …]   /   tl-organizer text po-import [ARCHIVOS.po…]
+tl-organizer text wrap [HOJAS…] --max-caracteres N [--max-lineas M] [--ancho PX --fuente TTF --tamano PX] [--reflow] [--salida CARPETA]
 ```
-La variable de entorno `SUBAHIBI_ES_PROJECT=/ruta/al/juego` fuerza qué proyecto usar (si no, se busca `subahibi-es.json` desde la carpeta actual hacia arriba).
+La variable de entorno `TL_ORGANIZER_PROJECT=/ruta/al/juego` fuerza qué proyecto usar (si no, se busca `tl-organizer.json` desde la carpeta actual hacia arriba).
 `build --fuente NOMBRE` y `patch-exe --fuente NOMBRE` cambian la fuente que usa el juego (ASCII, hasta 15 caracteres; instalada en el sistema).
 
 **`patch-exe`** solo parchea un `BGI.exe` cuyo sha256 corresponde a una versión conocida (hoy, 1.685.3 x86-64). Las versiones conocidas y sus direcciones están en el perfil del juego
@@ -284,16 +289,16 @@ La herramienta se está generalizando para cualquier novela visual (plan complet
 - **El núcleo** (`nucleo/`): proyecto, `exportar`/`build`/`estado`/`instalar`, hojas, `wrap`, galería. No conoce ningún formato.
 - **Los motores** (`motores/`): código que entiende los formatos de una familia de juegos. Hoy, `bgi` (Ethornell). Un motor es una subclase de
   `motores.base.Motor` que declara sus *capacidades* (`texto`, `imagenes`, `ejecutable`, `parche_viejo`); un paquete aparte puede agregar el suyo con un
-  entry point en el grupo `subahibi_es.motores`.
+  entry point en el grupo `tl_organizer.motores`.
 - **Los perfiles de juego**: un archivo TOML por juego con el motor, cómo reconocerlo, qué archivos tocar y las opciones del motor
-  (por ejemplo [`motores/bgi/juegos/subahibi-15th.toml`](src/subahibi_es/motores/bgi/juegos/subahibi-15th.toml)). `init` prueba todos los perfiles y usa el que coincide.
-  Se buscan en las carpetas de `SUBAHIBI_ES_PERFILES`, en `~/.config/subahibi-es/juegos/` (Windows: `%APPDATA%\subahibi-es\juegos\`) y en los incluidos en cada motor;
+  (por ejemplo [`motores/bgi/juegos/subahibi-15th.toml`](src/tl_organizer/motores/bgi/juegos/subahibi-15th.toml)). `init` prueba todos los perfiles y usa el que coincide.
+  Se buscan en las carpetas de `TL_ORGANIZER_PERFILES`, en `~/.config/tl-organizer/juegos/` (Windows: `%APPDATA%\tl-organizer\juegos\`) y en los incluidos en cada motor;
   un perfil propio con el mismo `id` reemplaza al incluido. Así, otra versión del exe o otro juego BGI se soporta escribiendo un TOML, sin tocar código.
 
 ## Estructura y pruebas
 
 ```
-src/subahibi_es/   cli.py
+src/tl_organizer/   cli.py
   nucleo/          proyecto, flujo, config, perfiles, texto, hojas, wrap, alineacion, revisar, po, enlaces, imagenes, galeria/ (index, _page, ocr)
   motores/         base (interfaz Motor), __init__ (registro)
     bgi/           arc, dsc, image, scn, exe_patch, oldpatch, build, cli, text/ (extract, export, import_, accents, align),

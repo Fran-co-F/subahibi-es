@@ -10,7 +10,7 @@ Importar: la traducción y la nota vuelven a las hojas (con una copia .bak de ca
     y pasa a «traducido» cuando cambió.  Una entrada sin traducción no cambia nada (no borra lo que ya había en la hoja).
     Si el original de la entrada no coincide con el de la hoja (otra versión del juego), la entrada se rechaza.
 `msgfmt -c` (y Poedit al guardar) avisa cuando el original y la traducción no empiezan o terminan igual con un salto de
-línea: son las mismas filas que `subahibi-es revisar` lista como «saltos».
+línea: son las mismas filas que `tl-organizer revisar` lista como «saltos».
 Necesita la biblioteca polib (pip install ".[po]").
 """
 import datetime

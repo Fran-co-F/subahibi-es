@@ -25,18 +25,19 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 def _cli(cwd, log, *args):
     env = dict(os.environ, PYTHONPATH=os.path.join(REPO, "src"))
-    env.pop("SUBAHIBI_ES_PROJECT", None)
-    r = subprocess.run([sys.executable, "-m", "subahibi_es", *args], cwd=cwd, env=env, capture_output=True, text=True)
-    log.write(f"$ subahibi-es {' '.join(args)}\n{r.stdout}{r.stderr}\n")
+    for e in ("TL_ORGANIZER_PROJECT", "SUBAHIBI_ES_PROJECT"):
+        env.pop(e, None)
+    r = subprocess.run([sys.executable, "-m", "tl_organizer", *args], cwd=cwd, env=env, capture_output=True, text=True)
+    log.write(f"$ tl-organizer {' '.join(args)}\n{r.stdout}{r.stderr}\n")
     if r.returncode:
-        sys.exit(f"falló «subahibi-es {' '.join(args)}»:\n{r.stdout}{r.stderr}")
+        sys.exit(f"falló «tl-organizer {' '.join(args)}»:\n{r.stdout}{r.stderr}")
 
 
 def _enlazar_juego(src, dst):
     os.makedirs(dst)
     for f in sorted(os.listdir(src)):
         p = os.path.join(src, f)
-        if os.path.isfile(p) and f != "subahibi-es.json":
+        if os.path.isfile(p) and f not in ("tl-organizer.json", "subahibi-es.json"):
             try:
                 os.symlink(p, os.path.join(dst, f))
             except OSError:
@@ -79,7 +80,8 @@ def main():
     with open(os.path.join(a.salida, "registro.txt"), "w", encoding="utf-8") as log:
         _cli(juego, log, "init", *(["--parche-viejo", os.path.abspath(a.parche_viejo)] if a.parche_viejo else []))
         _cli(juego, log, "exportar")
-        work = os.path.join(juego, "subahibi-es-trabajo")
+        work = next(w for w in (os.path.join(juego, "tl-organizer-trabajo"), os.path.join(juego, "subahibi-es-trabajo"))
+                    if os.path.isdir(w))      # (la segunda: versiones anteriores al cambio de nombre)
         for png in sorted(glob.glob(os.path.join(work, "originales", "*.png")))[:2]:
             shutil.copy2(png, os.path.join(work, "imagenes", "traducidas"))
         _cli(juego, log, "exportar")

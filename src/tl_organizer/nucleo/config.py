@@ -30,7 +30,7 @@ def need(value, key, what):
     """Argumento de la línea de comandos o, si falta, el valor del proyecto."""
     v = value or load().get(key)
     if not v:
-        sys.exit(f"falta {what}: indicalo, o ejecutá «subahibi-es init» dentro de la carpeta de instalación del juego")
+        sys.exit(f"falta {what}: indicalo, o ejecutá «tl-organizer init» dentro de la carpeta de instalación del juego")
     return v
 
 

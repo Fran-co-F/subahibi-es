@@ -3,7 +3,7 @@
 
 Los motores incluidos están en INCLUIDOS.  Cualquier paquete instalado puede agregar el suyo declarando un entry point:
 
-    [project.entry-points."subahibi_es.motores"]
+    [project.entry-points."tl_organizer.motores"]
     mimotor = "mipaquete:MiMotor"
 
 (si el nombre coincide con uno incluido, gana el incluido).  Los módulos se importan recién cuando se piden.
@@ -13,9 +13,9 @@ from importlib.metadata import entry_points
 
 from .base import Motor, MotorError
 
-GRUPO = "subahibi_es.motores"
+GRUPO = "tl_organizer.motores"
 INCLUIDOS = {
-    "bgi": "subahibi_es.motores.bgi:MotorBGI",
+    "bgi": "tl_organizer.motores.bgi:MotorBGI",
 }
 
 

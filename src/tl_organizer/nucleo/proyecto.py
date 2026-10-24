@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""El proyecto: una carpeta de instalación del juego con un subahibi-es.json y una carpeta de trabajo.
+"""El proyecto: una carpeta de instalación del juego con un tl-organizer.json y una carpeta de trabajo.
 
 `init` reconoce el juego con los perfiles (perfiles.py), crea el JSON y las carpetas de trabajo y guarda una copia del
 ejecutable original.  Los demás comandos buscan el JSON en la carpeta actual o en las de arriba (como git), así que se pueden
@@ -17,8 +17,10 @@ import shutil
 from .. import motores
 from . import hojas, perfiles
 
-NAME = "subahibi-es.json"
-WORK = "subahibi-es-trabajo"
+NAME = "tl-organizer.json"
+WORK = "tl-organizer-trabajo"
+LEGADO = {"subahibi-es.json": "subahibi-es-trabajo"}     # proyectos creados con el nombre anterior de la herramienta
+ENV = ("TL_ORGANIZER_PROJECT", "SUBAHIBI_ES_PROJECT")    # fuerzan qué proyecto usar (el segundo, por compatibilidad)
 VERSION = 2
 PERFIL_LEGADO = "subahibi-15th"
 SUBDIRS = {                      # nombre -> ruta dentro de la carpeta de trabajo
@@ -51,9 +53,11 @@ class ProjectError(Exception):
 
 
 class Project:
-    def __init__(self, root, cfg, perfil=None):
+    def __init__(self, root, cfg, perfil=None, json_name=NAME):
         self.root = os.path.abspath(root)
         self.cfg = cfg
+        self.json_name = json_name
+        self.work_name = LEGADO.get(json_name, WORK)
         self._perfil = perfil
         self._motor = None
 
@@ -81,11 +85,15 @@ class Project:
         return self.cfg.get("version") if "perfil" in self.cfg else self.cfg.get("motor")
 
     def dir(self, name):
-        return os.path.join(self.root, WORK, SUBDIRS[name])
+        return os.path.join(self.root, self.work_name, SUBDIRS[name])
 
     @property
     def json_path(self):
-        return os.path.join(self.root, NAME)
+        return os.path.join(self.root, self.json_name)
+
+    @property
+    def work(self):
+        return os.path.join(self.root, self.work_name)
 
     @property
     def parche_viejo(self):
@@ -95,7 +103,7 @@ class Project:
 
     @property
     def informe_revision(self):
-        return os.path.join(self.root, WORK, "revision.tsv")
+        return os.path.join(self.work, "revision.tsv")
 
     @property
     def estado_tsv(self):
@@ -113,23 +121,24 @@ class Project:
                     if self.motor.identificar_ejecutable(f.read()):
                         return p
         raise ProjectError(f"no encuentro un {exe} original (ni en la instalación ni en el respaldo): "
-                           f"ejecutá «subahibi-es desinstalar» o restaurá el {exe} original del juego")
+                           f"ejecutá «tl-organizer desinstalar» o restaurá el {exe} original del juego")
 
 
 def find(start=None):
     """El proyecto que contiene 'start' (por defecto, la carpeta actual) o None."""
-    env = os.environ.get("SUBAHIBI_ES_PROJECT")
+    env = next((os.environ[e] for e in ENV if os.environ.get(e)), None)
     cur = os.path.abspath(env if env else (start or os.getcwd()))
     if os.path.isfile(cur):
         cur = os.path.dirname(cur)
     while True:
-        j = os.path.join(cur, NAME)
-        if os.path.isfile(j):
-            try:
-                with open(j, encoding="utf-8") as f:
-                    return Project(cur, json.load(f))
-            except (OSError, ValueError) as e:
-                raise ProjectError(f"{j} no se puede leer: {e}")
+        for name in (NAME, *LEGADO):
+            j = os.path.join(cur, name)
+            if os.path.isfile(j):
+                try:
+                    with open(j, encoding="utf-8") as f:
+                        return Project(cur, json.load(f), json_name=name)
+                except (OSError, ValueError) as e:
+                    raise ProjectError(f"{j} no se puede leer: {e}")
         nxt = os.path.dirname(cur)
         if nxt == cur:
             return None
@@ -139,7 +148,7 @@ def find(start=None):
 def require(start=None):
     p = find(start)
     if p is None:
-        raise ProjectError("no hay un proyecto acá: ejecutá «subahibi-es init» dentro de la carpeta de instalación del juego")
+        raise ProjectError("no hay un proyecto acá: ejecutá «tl-organizer init» dentro de la carpeta de instalación del juego")
     return p
 
 
@@ -158,10 +167,11 @@ def validate_game(folder, perfil, motor):
             data = f.read()
         version = motor.identificar_ejecutable(data)
         if version is None:
-            backup = os.path.join(folder, WORK, SUBDIRS["backup"], name)
-            if os.path.isfile(backup):
-                with open(backup, "rb") as f:
-                    version = motor.identificar_ejecutable(f.read())
+            for work in (WORK, *LEGADO.values()):
+                backup = os.path.join(folder, work, SUBDIRS["backup"], name)
+                if version is None and os.path.isfile(backup):
+                    with open(backup, "rb") as f:
+                        version = motor.identificar_ejecutable(f.read())
             if version is None:
                 problems.append(f"{name} no es una versión conocida (sha256 {hashlib.sha256(data).hexdigest()[:16]}…); "
                                 "versiones compatibles: " + "; ".join(motor.versiones_conocidas()))
@@ -203,11 +213,11 @@ def init(folder, parche_viejo=None, log=print, destino=None):
     folder = os.path.abspath(folder)
     if not os.path.isdir(folder):
         raise ProjectError(f"no existe la carpeta {folder}")
-    existing = os.path.join(folder, NAME)
-    if os.path.exists(existing):
+    existing = next((n for n in (NAME, *LEGADO) if os.path.exists(os.path.join(folder, n))), None)
+    if existing:
         if not parche_viejo:
-            raise ProjectError(f"ya hay un proyecto en {folder} ({NAME}); para cambiar el parche viejo usá "
-                               "«init --parche-viejo ARCHIVO.zip»; para empezar de nuevo, «subahibi-es reset»")
+            raise ProjectError(f"ya hay un proyecto en {folder} ({existing}); para cambiar el parche viejo usá "
+                               "«init --parche-viejo ARCHIVO.zip»; para empezar de nuevo, «tl-organizer reset»")
         parche_viejo = os.path.abspath(parche_viejo)
         if not os.path.exists(parche_viejo):
             raise ProjectError(f"no existe {parche_viejo}")
@@ -255,7 +265,7 @@ def reset(proj, todo=False):
     os.remove(proj.json_path)
     removed.append(proj.json_path)
     if todo:
-        work = os.path.join(proj.root, WORK)
+        work = proj.work
         if os.path.isdir(work):
             w = os.path.realpath(work)
             try:

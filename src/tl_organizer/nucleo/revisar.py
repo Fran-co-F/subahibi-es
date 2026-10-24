@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Control de calidad de las traducciones (subahibi-es revisar).
+"""Control de calidad de las traducciones (tl-organizer revisar).
 
 Cada control es una función  control(fila, ctx) -> iterable de (nivel, código, detalle).  nivel: «error» (el texto se
 verá mal o no se puede aplicar) o «aviso» (conviene mirarlo).  Los controles generales están en CONTROLES; el motor

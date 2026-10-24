@@ -151,7 +151,7 @@ def estado(proj, log=print, nivel=0):
                 _tabla("escenario", esc, log, ancho)
         log("")
     else:
-        log("texto:           todavía no exportado (ejecutá «subahibi-es exportar»)")
+        log("texto:           todavía no exportado (ejecutá «tl-organizer exportar»)")
     trad = [f for f in os.listdir(proj.dir("traducidas"))] if os.path.isdir(proj.dir("traducidas")) else []
     log(f"imágenes:        {len(trad)} traducidas en {proj.dir('traducidas')}")
     salida = proj.dir("salida")
@@ -188,7 +188,7 @@ def instalar(proj, log=print):
     backup/instalado/ para poder volver atrás con desinstalar."""
     src = proj.dir("salida")
     if not os.path.isdir(src) or not os.listdir(src):
-        raise proj_mod.ProjectError("no hay nada para instalar: ejecutá primero «subahibi-es build»")
+        raise proj_mod.ProjectError("no hay nada para instalar: ejecutá primero «tl-organizer build»")
     mpath = _manifest(proj)
     manifest = {}
     if os.path.exists(mpath):

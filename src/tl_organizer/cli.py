@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Interfaz de línea de comandos: subahibi-es <comando>.
+"""Interfaz de línea de comandos: tl-organizer <comando>.
 
 Flujo normal (dentro de la carpeta de instalación del juego):  init -> exportar -> (traducir) -> build -> instalar.
 """
@@ -22,12 +22,12 @@ def cmd_init(a):
         return 0
     print(f"proyecto creado en {proj.root}")
     print(f"  juego detectado:    {proj.perfil.nombre}" + (f" ({proj.version})" if proj.version else ""))
-    print(f"  carpeta de trabajo: {os.path.join(proj.root, project.WORK)}")
+    print(f"  carpeta de trabajo: {proj.work}")
     print(f"  idiomas:            {proj.idiomas[0]} -> {proj.idiomas[1]}")
-    print(f"  parche viejo:       {proj.parche_viejo or '(sin configurar; agregalo con «subahibi-es init --parche-viejo ARCHIVO.zip»)'}")
+    print(f"  parche viejo:       {proj.parche_viejo or '(sin configurar; agregalo con «tl-organizer init --parche-viejo ARCHIVO.zip»)'}")
     if proj.perfil.ejecutable:
         print(f"  copia del {proj.perfil.ejecutable} original guardada en la carpeta de trabajo (backup)")
-    print("\nsiguiente paso:  subahibi-es exportar")
+    print("\nsiguiente paso:  tl-organizer exportar")
     return 0
 
 
@@ -42,7 +42,7 @@ def cmd_exportar(a):
     print("\nahora podés traducir:")
     print(f"  - texto:      abrí las hojas de {proj.dir('texto')} (LibreOffice, Excel…) y completá la columna «{hojas.nombre_idioma(proj.idiomas[1])}»")
     print(f"  - imágenes:   abrí {os.path.join(proj.dir('indice'), 'index.html')} en el navegador; guardá las traducidas en {proj.dir('traducidas')}")
-    print("cuando termines (o para probar):  subahibi-es build")
+    print("cuando termines (o para probar):  tl-organizer build")
     return 0
 
 
@@ -76,7 +76,7 @@ def cmd_build(a):
         print("es una carpeta de prueba con enlaces a los archivos del juego: se ejecuta tal cual, sin tocar la instalación")
     else:
         print("lo que hay que copiar al juego está ahí: copiá su contenido sobre la carpeta de instalación\n"
-              "(o ejecutá «subahibi-es instalar», que lo hace y guarda copia de lo que pisa)")
+              "(o ejecutá «tl-organizer instalar», que lo hace y guarda copia de lo que pisa)")
     return 0
 
 
@@ -85,7 +85,7 @@ def cmd_revisar(a):
     from .nucleo import wrap
     proj = project.require()
     if not os.path.isdir(proj.dir("texto")) or not any(f.endswith(".xlsx") for f in os.listdir(proj.dir("texto"))):
-        sys.exit("todavía no hay hojas: ejecutá «subahibi-es exportar»")
+        sys.exit("todavía no hay hojas: ejecutá «tl-organizer exportar»")
     fits = wrap.make_fits(a.max_caracteres, a.ancho, a.fuente, a.tamano) if (a.max_caracteres or a.ancho) else None
     probs = workflow.revisar(proj, _estados(a.estados), fits, a.max_lineas)
     if a.solo:
@@ -114,7 +114,7 @@ def cmd_text_po_export(a):
     r = po.exportar(proj.dir("texto"), dest, proj.idiomas, proj.perfil.nombre, _estados(a.estados) if a.estados else None)
     print(f"{r['entradas']} entradas en {r['archivos']} archivos .po -> {dest}"
           + (f" ({r['omitidas']} filas omitidas)" if r["omitidas"] else ""))
-    print("abrilos con Poedit, OmegaT, Lokalize o Weblate; para volver a las hojas:  subahibi-es text po-import")
+    print("abrilos con Poedit, OmegaT, Lokalize o Weblate; para volver a las hojas:  tl-organizer text po-import")
     return 0
 
 
@@ -143,9 +143,9 @@ def cmd_desinstalar(a):
 def cmd_reset(a):
     proj = project.require()
     if os.path.exists(os.path.join(proj.dir("backup"), "instalado.json")) and not a.forzar:
-        sys.exit("el parche está instalado en el juego: ejecutá primero «subahibi-es desinstalar» (o usá --forzar)")
+        sys.exit("el parche está instalado en el juego: ejecutá primero «tl-organizer desinstalar» (o usá --forzar)")
     if a.todo and not a.si:
-        work = os.path.join(proj.root, project.WORK)
+        work = proj.work
         print(f"se va a BORRAR la carpeta de trabajo {work}")
         print("incluye las hojas de texto, las imágenes traducidas y los respaldos. Los archivos del juego no se tocan.")
         if not sys.stdin.isatty() or input("escribí SI para continuar: ").strip() != "SI":
@@ -154,7 +154,7 @@ def cmd_reset(a):
     for r in removed:
         print("borrado:", r)
     if not a.todo:
-        print(f"la carpeta de trabajo ({project.WORK}) se conserva; para borrarla también: «subahibi-es reset --todo»")
+        print(f"la carpeta de trabajo ({proj.work_name}) se conserva; para borrarla también: «tl-organizer reset --todo»")
     return 0
 
 
@@ -214,7 +214,7 @@ def cmd_text_wrap(a):
 # ---------------------------------------------------------------- argumentos
 
 def _parser():
-    ap = argparse.ArgumentParser(prog="subahibi-es", description=__doc__,
+    ap = argparse.ArgumentParser(prog="tl-organizer", description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True, metavar="comando")
 
