@@ -328,6 +328,14 @@ Notas que dejó la fase 1:
   - [x] `motores/contrato.py`; lo pasan BGI (modos UTF-8 y katakana, `releer` sobre los escenarios sueltos), un motor de texto plano
         de juguete y una herramienta externa simulada; BGI ya no exige un exe si el perfil no declara uno
 - [ ] Fase 4 — Kirikiri y tercer motor, interfaz `Motor` v1
-- [ ] Fase 5 — API local y GUI web
+- [ ] **Fase 5** — API local e interfaz gráfica *(primera versión funcionando)*
+  - [x] API local (`nucleo/api.py`, solo biblioteca estándar): 127.0.0.1 + token por sesión; filas con fusión a tres bandas,
+        tareas largas con registro, revisión, galería (ver/subir/estado), preferencias; `tl-organizer servir` / `tl-organizer gui`
+  - [x] Svelte 5 + Vite: Panel, Traducir (lista virtual, búsqueda global, editor con atajos, guardado automático, conflictos,
+        vista previa de la ventana de texto), Revisar, Imágenes (arrastrar y soltar)
+  - [x] Tauri 2: Rust lanza el backend en un puerto libre con token aleatorio; diálogos nativos; `tauri dev` y paquete `.deb`
+  - [x] prueba de la interfaz en jsdom contra la API real (`npm run prueba`) y pruebas de la API en pytest
+  - [ ] empaquetar el backend (PyInstaller como *sidecar*) para que la app no necesite Python instalado
+  - [ ] ejecutables en GitHub Actions (Linux, Windows, macOS); índice SQLite si la búsqueda global se pone lenta
 - [ ] Fase 6 — explorador de archivos, asistente de perfiles, generador de plugins
 - [ ] Fase 7 — glosario, memoria de traducción, sugerencias

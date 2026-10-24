@@ -58,6 +58,13 @@ class Almacen:
             out.setdefault(grupo, {})[esc] = hojas.read_tsv(os.path.join(self.carpeta, grupo, arch))
         return out
 
+    def leer_escenario(self, escenario):
+        """(grupo, [filas]) de un escenario, o KeyError."""
+        for grupo, esc, arch in self._indice():
+            if esc == escenario:
+                return grupo, hojas.read_tsv(os.path.join(self.carpeta, grupo, arch))
+        raise KeyError(escenario)
+
     def filas_por_escenario(self):
         return {esc: rows for g in self.leer().values() for esc, rows in g.items()}
 

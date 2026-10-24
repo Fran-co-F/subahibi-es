@@ -11,6 +11,10 @@ proyectos creados con el nombre anterior (`subahibi-es.json`, `subahibi-es-traba
 Licencia: **GPL-3.0-or-later**. Este repositorio contiene **solo herramientas**: no incluye imágenes, audio, exe, fuentes ni texto del juego, ni la
 traducción. Todo se genera en tu equipo a partir de **tu copia del juego**. Hace falta una copia legítima.
 
+**Interfaz gráfica:** `tl-organizer gui` abre la interfaz en el navegador; la app de escritorio (Tauri) está en [`gui/`](gui/README.md).
+Panel de avance y acciones, editor con búsqueda, vista previa de la ventana de texto y atajos de teclado, revisión y galería de imágenes.
+La guía de abajo usa la línea de comandos: todo lo que hace la interfaz también se puede hacer así.
+
 ---
 
 # Guía paso a paso
@@ -221,6 +225,7 @@ tl-organizer reset --todo     # borra también tl-organizer-trabajo/ (pide confi
 | `build` | Cada vez que quieras generar el parche con lo traducido. |
 | `instalar` / `desinstalar` | Para probar en el juego y volver atrás. |
 | `reset [--todo]` | Para empezar de nuevo. |
+| `gui` / `servir` | La interfaz gráfica en el navegador / la API local que usa la app de escritorio (ver [`gui/`](gui/README.md)). |
 
 ## Problemas comunes
 
@@ -326,7 +331,7 @@ La herramienta se está generalizando para cualquier novela visual (plan complet
 
 ```
 src/tl_organizer/   cli.py
-  nucleo/          proyecto, flujo, config, perfiles, texto, hojas, wrap, alineacion, almacen, vistas, revisar, po, enlaces, imagenes, galeria/ (index, _page, ocr)
+  nucleo/          proyecto, flujo, config, perfiles, texto, hojas, wrap, alineacion, almacen, vistas, revisar, po, api, enlaces, imagenes, galeria/ (index, _page, ocr)
   motores/         base (interfaz Motor), __init__ (registro), contrato (prueba de contrato)
     kit/           codificaciones, contenedores, cadenas, texto_plano (MotorTextoPlano), externo (MotorExterno)
     bgi/           arc, dsc, image, scn, exe_patch, oldpatch, build, cli, text/ (extract, export, import_, accents, align),

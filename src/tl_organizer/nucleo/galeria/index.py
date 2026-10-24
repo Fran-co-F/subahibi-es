@@ -38,6 +38,27 @@ def read_status(path):
     return rules
 
 
+def listar(originals, translated, status_file=None, pantallas=None):
+    """Las imágenes con su estado, sin generar nada (lo usa la interfaz gráfica).  Misma prioridad que build():
+    traducida > regla manual de estado.tsv > sin_clasificar (el OCR no se corre acá).
+    -> [{nombre, pantalla, estado, nota, traducida (ruta o None)}]"""
+    pantallas = pantallas or {}
+    nombres = sorted(f[:-4] for f in os.listdir(originals) if f.lower().endswith(".png")) if os.path.isdir(originals) else []
+    tr = {}
+    if translated and os.path.isdir(translated):
+        for f in os.listdir(translated):
+            tr[os.path.splitext(f)[0]] = os.path.join(translated, f)
+    rules = read_status(status_file)
+    out = []
+    for n in nombres:
+        st, nota = ("traducida", "") if n in tr else next(((s, note) for pat, s, note in rules if fnmatch.fnmatch(n, pat)),
+                                                        ("sin_clasificar", ""))
+        g = re.match(r"[A-Za-z]+", n)
+        g = g.group(0) if g else n
+        out.append(dict(nombre=n, pantalla=pantallas.get(g, g), estado=st, nota=nota, traducida=tr.get(n)))
+    return out
+
+
 def _thumb(im, maxw=1100, maxh=500):
     s = min(1, maxw / im.size[0], maxh / im.size[1])
     return im.resize((max(1, int(im.size[0] * s)), max(1, int(im.size[1] * s))), Image.LANCZOS) if s < 1 else im

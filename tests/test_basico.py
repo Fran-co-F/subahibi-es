@@ -972,3 +972,78 @@ def test_motor_externo_envuelve_una_herramienta(tmp_path):
                                           "herramienta": {"programa": "no-existe-este-programa"}})).ejecutable()
     with pytest.raises(MotorError, match="terminó con error 3"):
         m.ejecutar(["otra-cosa"])
+
+
+# ---------------------------------------------------------------- fase 5: API local de la interfaz gráfica
+
+def _api_cliente(srv):
+    """Levanta la API en un hilo; devuelve (pedir(metodo, ruta, cuerpo=None, token=...), cerrar)."""
+    import json as _json
+    import threading
+    import urllib.error
+    import urllib.request
+    from http.server import ThreadingHTTPServer
+    from tl_organizer.nucleo import api
+    httpd = ThreadingHTTPServer(("127.0.0.1", 0), api.crear_manejador(srv))
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    base = f"http://127.0.0.1:{httpd.server_address[1]}/api/"
+
+    def pedir(metodo, ruta, cuerpo=None, token=srv.token):
+        datos = _json.dumps(cuerpo).encode() if cuerpo is not None else None
+        req = urllib.request.Request(base + ruta, data=datos, method=metodo, headers={"X-TL-Token": token, "Content-Type": "application/json"})
+        try:
+            with urllib.request.urlopen(req) as r:
+                return r.status, _json.loads(r.read())
+        except urllib.error.HTTPError as e:
+            return e.code, _json.loads(e.read())
+    return pedir, httpd.shutdown
+
+
+def test_api_local(tmp_path, monkeypatch):
+    import time as _time
+    from tl_organizer.nucleo import api, proyecto as project
+    monkeypatch.setattr(api, "_archivo_recientes", lambda: str(tmp_path / "recientes.json"))
+    g = _juego_falso(tmp_path, monkeypatch)
+    proj, _ = project.init(str(g))
+    proj.almacen.escribir({"data01": {"esc": [_fila(1, "一", "uno", "del parche"), _fila(2, "二", "", "sin traducir")]}})
+    srv = api.Servidor("secreto")
+    pedir, cerrar = _api_cliente(srv)
+    try:
+        assert pedir("GET", "info", token="otro")[0] == 403                              # sin el token no se entra
+        st, info = pedir("GET", "info")
+        assert st == 200 and info["proyecto"] is None and "bgi" in info["motores"]
+        assert pedir("GET", "resumen")[0] == 409                                          # todavía no hay proyecto
+        assert pedir("POST", "proyecto/abrir", {"carpeta": str(tmp_path / "nada")})[0] == 404
+        st, p = pedir("POST", "proyecto/abrir", {"carpeta": str(g)})
+        assert st == 200 and p["perfil"] == "falso" and p["exportado"] and pedir("GET", "info")[1]["recientes"] == [str(g)]
+        st, r = pedir("GET", "resumen")
+        assert r["estados"] == {"del parche": 1, "sin traducir": 1} and r["grupos"][0]["escenarios"][0]["escenario"] == "esc"
+        st, f = pedir("GET", "filas?escenario=esc")
+        assert f["total"] == 2 and f["filas"][1]["base"]
+        assert pedir("GET", "filas?q=uno")[1]["total"] == 1 and pedir("GET", "filas?estado=sin%20traducir")[1]["total"] == 1
+        # editar con la base: se aplica; repetir con la base vieja y otro texto: conflicto
+        fila = f["filas"][1]
+        cambio = {"clave": fila["clave"], "traduccion": "dos", "estado": "traducido", "nota": "", "base": fila["base"]}
+        st, r = pedir("PUT", "filas", {"cambios": [cambio]})
+        assert r["actualizadas"] == 1 and r["filas"][fila["clave"]]["traduccion"] == "dos"
+        st, r = pedir("PUT", "filas", {"cambios": [dict(cambio, traduccion="DOS")]})
+        assert r["actualizadas"] == 0 and r["conflictos"][0]["clave"] == fila["clave"]
+        assert pedir("PUT", "filas", {"cambios": [{"clave": "x", "traduccion": "y"}]})[0] == 400        # faltan campos
+        assert proj.almacen.filas_por_escenario()["esc"][1]["traduccion"] == "dos"
+        # una tarea: corre en segundo plano y deja su registro
+        st, t = pedir("POST", "tareas", {"tipo": "wrap", "opciones": {"max_caracteres": 20}})
+        for _ in range(100):
+            st, t = pedir("GET", f"tareas/{t['id']}")
+            if t["estado"] != "corriendo":
+                break
+            _time.sleep(0.05)
+        assert t["estado"] == "ok" and any("saltos de línea" in l for l in t["log"])
+        assert pedir("POST", "tareas", {"tipo": "borrar-todo"})[0] == 400
+        st, r = pedir("POST", "revisar", {})
+        assert st == 200 and "total" in r
+        assert pedir("PUT", "config", {"vista_previa": {"tamano": 30}})[1] == {"vista_previa": {"tamano": 30}}
+        assert project.find(str(g)).cfg["gui"]["vista_previa"]["tamano"] == 30
+        assert pedir("GET", "galeria")[1]["imagenes"] == []
+        assert pedir("GET", "no/existe")[0] == 404
+    finally:
+        cerrar()

@@ -26,3 +26,10 @@ parche de sakurano/
 *.7z
 *.bak
 node_modules/
+
+# interfaz gráfica: lo que se genera
+gui/dist/
+gui/dist-pruebas/
+gui/node_modules/
+gui/src-tauri/target/
+gui/src-tauri/gen/

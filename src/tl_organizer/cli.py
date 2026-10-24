@@ -148,6 +148,13 @@ def cmd_text_hojas(a):
     return 0
 
 
+def cmd_servir(a):
+    from .nucleo import api
+    carpeta = a.proyecto or (os.getcwd() if project.find() else None)
+    api.servir(a.puerto, None, carpeta, abrir_navegador=a.cmd == "gui")
+    return 0
+
+
 def cmd_instalar(a):
     workflow.instalar(project.require())
     return 0
@@ -299,6 +306,13 @@ def _parser():
     p.add_argument("--max-lineas", type=int, metavar="M", help="avisa los textos de más de M líneas")
     p.add_argument("-v", "--verbose", action="store_true", help="listar todos los problemas (si no, los primeros 20)")
     p.set_defaults(f=cmd_revisar)
+
+    for nombre, ayuda in (("gui", "abre la interfaz gráfica en el navegador"),
+                          ("servir", "levanta la API local de la interfaz (la usa la app de escritorio)")):
+        p = sub.add_parser(nombre, help=ayuda)
+        p.add_argument("--puerto", type=int, default=0, help="puerto en 127.0.0.1 (por defecto, uno libre)")
+        p.add_argument("--proyecto", metavar="CARPETA", help="proyecto a abrir (por defecto, el de la carpeta actual)")
+        p.set_defaults(f=cmd_servir)
 
     p = sub.add_parser("instalar", help="copia «salida» sobre el juego (guarda copia de lo que pisa)")
     p.set_defaults(f=cmd_instalar)
