@@ -100,7 +100,7 @@ def cmd_text_export(a):
     from ...nucleo import texto
     cfg = config.load()
     juego = need(a.juego, "juego", "la carpeta del juego")
-    salida = a.salida or cfg.get("texto") or "texto"
+    salida = a.salida or "texto"
     m = _motor()
     r = texto.exportar(m.textos(juego, a.parche_viejo or cfg.get("parche_viejo"), a.arc), salida, tsv=a.tsv, xlsx=not a.sin_xlsx,
                        idiomas=cfg["idiomas"])
@@ -113,7 +113,13 @@ def cmd_text_export(a):
 def cmd_text_import(a):
     from ...nucleo import texto
     from .text import import_
-    filas = texto.recolectar(a.hojas or [need(None, "texto", "las hojas")])
+    if a.hojas:
+        filas = texto.recolectar(a.hojas)
+    else:
+        from ...nucleo import flujo
+        proj = project.require()
+        flujo.sincronizar(proj)
+        filas = proj.almacen.filas_por_escenario()
     r = import_.apply_rows(need(a.juego, "juego", "la carpeta del juego"), filas, need(a.salida, "juego_es", "la carpeta de salida"),
                            lista(a.estados), not a.katakana, _motor().data_arcs)
     for k, v in r["errores"][:30]:
@@ -147,7 +153,7 @@ def registrar(sub, grupos):
 
     tx = grupos["text"]
     p = tx.add_parser("export", help="(BGI) exporta el texto a hojas XLSX (una por .arc, una hoja por script)")
-    p.add_argument("juego", nargs="?"); p.add_argument("salida", nargs="?", help="por defecto, la carpeta «texto» del proyecto")
+    p.add_argument("juego", nargs="?"); p.add_argument("salida", nargs="?", help="por defecto, «texto» en la carpeta actual")
     p.add_argument("--arc", nargs="+", help="solo estos .arc (por defecto, los del perfil: data0*.arc)")
     p.add_argument("--parche-viejo", metavar="ZIP_O_CARPETA", help="traducción vieja: precarga el español; por defecto, la del proyecto")
     p.add_argument("--tsv", action="store_true", help="además, un TSV por script (para git/diff)")
@@ -155,7 +161,7 @@ def registrar(sub, grupos):
 
     p = tx.add_parser("import", help="(BGI) arma los escenarios del juego con el español de las hojas")
     p.add_argument("juego", nargs="?"); p.add_argument("salida", nargs="?", help="carpeta donde escribe Script/CVTD/")
-    p.add_argument("hojas", nargs="*", help=".xlsx / .tsv o carpetas con ellos (por defecto, la carpeta «texto» del proyecto)")
+    p.add_argument("hojas", nargs="*", help=".xlsx / .tsv o carpetas con ellos (por defecto, la traducción del proyecto)")
     p.add_argument("--estados", default="traducido,del parche",
                    help="estados que se aplican (por defecto: traducido,del parche; agregar 'revisar' para probar todo)")
     p.add_argument("--katakana", action="store_true", help="modo antiguo: sin UTF-8, acentos como katakana de ancho medio")

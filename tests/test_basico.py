@@ -297,10 +297,11 @@ def test_init_valida_y_crea_el_proyecto(tmp_path, monkeypatch):
     g = _juego_falso(tmp_path, monkeypatch)
     proj, creado = project.init(str(g))
     assert creado and proj.cfg["perfil"] == "falso" and proj.cfg["motor"] == "bgi" and proj.version == "falso 1.0"
-    for name in ("originales", "texto", "traducidas", "indice", "backup", "salida"):
+    for name in ("originales", "traduccion", "hojas", "traducidas", "indice", "backup", "salida"):
         assert (g / project.WORK / project.SUBDIRS[name]).is_dir()
     assert (g / project.WORK / "backup" / "BGI.exe").read_bytes() == b"MZ-falso"      # respaldo del exe original
     assert (g / "tl-organizer.json").exists() and (g / project.WORK / "imagenes" / "estado.tsv").exists()
+    assert "traduccion" not in (g / project.WORK / ".gitignore").read_text(encoding="utf-8").split("\n")    # se versiona
     sub = g / "Script"
     sub.mkdir()
     assert project.find(str(sub)).root == str(g)                  # se encuentra desde una subcarpeta
@@ -442,18 +443,22 @@ def test_estado_por_archivo_y_por_escenario(tmp_path, monkeypatch):
     from tl_organizer.nucleo import flujo as workflow, hojas as sheet, proyecto as project
     g = _juego_falso(tmp_path, monkeypatch)
     proj, _ = project.init(str(g))
-    fila = lambda i, st: dict(clave=f"x:{i:05d}", tipo="mensaje", original="j", traduccion="e" if st != "sin traducir" else "",
-                              estado=st, nota="", pos=i, hash="h")
+    (g / project.WORK / "texto").mkdir()                     # un proyecto de antes del almacén: hojas en texto/
+    fila = lambda esc, i, st: dict(clave=f"{esc}:{i:05d}", tipo="mensaje", original="j", traduccion="e" if st != "sin traducir" else "",
+                                   estado=st, nota="", pos=i, hash="h")
     sheet.write_xlsx(str(g / project.WORK / "texto" / "data01.xlsx"),
-                     {"esc_a": [fila(1, "del parche"), fila(2, "del parche"), fila(3, "sin traducir"), fila(4, "revisar")],
-                      "esc_b": [fila(1, "traducido")]})
-    sheet.write_xlsx(str(g / project.WORK / "texto" / "data02.xlsx"), {"esc_c": [fila(1, "sin traducir")] * 4})
+                     {"esc_a": [fila("esc_a", 1, "del parche"), fila("esc_a", 2, "del parche"), fila("esc_a", 3, "sin traducir"),
+                                fila("esc_a", 4, "revisar")],
+                      "esc_b": [fila("esc_b", 1, "traducido")]})
+    sheet.write_xlsx(str(g / project.WORK / "texto" / "data02.xlsx"), {"esc_c": [fila("esc_c", i, "sin traducir") for i in range(1, 5)]})
     def salida(nivel):
         out = []
         workflow.estado(proj, log=out.append, nivel=nivel)
         return "\n".join(out)
     v0, v1, v2 = salida(0), salida(1), salida(2)
-    assert "9 filas en 2 hojas" in v0 and "listo 33.3%" in v0                                 # 3 de 9 listas (2 del parche + 1 traducido)
+    assert "9 filas en 2 archivos" in v0 and "listo 33.3%" in v0
+    assert proj.almacen.existe() and not (g / project.WORK / "texto").exists()                  # se migró a traduccion/
+    assert (g / project.WORK / "hojas" / "data01.xlsx").exists() and list((g / project.WORK / "backup").glob("texto-migrado-*"))                                 # 3 de 9 listas (2 del parche + 1 traducido)
     assert "data01" not in v0 and "archivo" in v1 and "data01" in v1 and "esc_a" not in v1
     linea = [l for l in v1.splitlines() if l.startswith("data01")][0]
     assert linea.split()[:3] == ["data01", "5", "60.0%"]                                       # 3 de 5 listas
@@ -594,13 +599,15 @@ def test_plugin_de_motor_con_su_perfil_hace_todo_el_flujo(tmp_path, monkeypatch)
     assert proj.perfil.id == "juego-prueba" and isinstance(proj.motor, MotorDePrueba)
     rep = flujo.exportar(proj, log=lambda *a: None)
     assert "imagenes_exportadas" not in rep and rep["texto"]["filas"] == 2           # sin capacidad «imagenes», no se intenta
-    hoja = g / project.WORK / "texto" / "juego.xlsx"
+    assert (g / project.WORK / "traduccion" / "juego" / "esc1.tsv").exists()
+    hoja = g / project.WORK / "hojas" / "juego.xlsx"
     sheets = hojas.read_xlsx(str(hoja))
-    sheets["esc1"][0].update(traduccion="Hola", estado="traducido")
-    hojas.write_xlsx(str(hoja), sheets)
+    sheets["esc1"][0].update(traduccion="Hola", estado="traducido")          # lo que haría quien traduce en Excel
+    hojas.write_xlsx(str(hoja), sheets, huella=lambda r: r["base"])
     r = flujo.build(proj, proj.dir("salida"), opciones={"x": 1}, log=lambda *a: None)
     assert r["opciones"] == {"x": 1}
     assert (g / project.WORK / "salida" / "textos" / "esc1.txt").read_text(encoding="utf-8") == "Hola\nさようなら\n"
+    assert proj.almacen.filas_por_escenario()["esc1"][0]["traduccion"] == "Hola"            # build trajo la hoja a traduccion/
     out = []
     flujo.estado(proj, log=out.append)
     assert any("Juego de prueba" in l for l in out) and any("listo 50.0%" in l for l in out)
@@ -671,11 +678,10 @@ def test_revisar_controles_generales():
 def test_revisar_comando_escribe_el_informe(tmp_path, monkeypatch, capsys):
     pytest.importorskip("openpyxl")
     from tl_organizer import cli
-    from tl_organizer.nucleo import hojas, proyecto as project
+    from tl_organizer.nucleo import proyecto as project
     g = _juego_falso(tmp_path, monkeypatch)
     project.init(str(g))
-    hojas.write_xlsx(str(g / project.WORK / "texto" / "data01.xlsx"),
-                     {"esc": [_fila(1, "こんにちは", "<i>Hola"), _fila(2, "さようなら", "Adiós")]})
+    project.find(str(g)).almacen.escribir({"data01": {"esc": [_fila(1, "こんにちは", "<i>Hola"), _fila(2, "さようなら", "Adiós")]}})
     monkeypatch.chdir(g)
     assert cli.main(["revisar"]) == 1                                         # hay un error (etiqueta sin cerrar)
     out = capsys.readouterr().out
@@ -685,36 +691,82 @@ def test_revisar_comando_escribe_el_informe(tmp_path, monkeypatch, capsys):
 
 
 def test_po_ida_y_vuelta(tmp_path, monkeypatch):
-    pytest.importorskip("openpyxl")
     polib = pytest.importorskip("polib")
-    from tl_organizer.nucleo import hojas, po
-    textos = tmp_path / "texto"
-    textos.mkdir()
-    hojas.write_xlsx(str(textos / "data01.xlsx"), {"esc": [
+    from tl_organizer.nucleo import po
+    from tl_organizer.nucleo.almacen import Almacen
+    alm = Almacen(str(tmp_path / "traduccion"))
+    alm.escribir({"data01": {"esc": [
         _fila(1, "こんにちは\nさん", "Hola\nseñor", estado="del parche"),
         _fila(2, "さようなら", "Chau", estado="revisar", nota="dudoso"),
         _fila(3, "ありがとう", "", estado="sin traducir"),
-        _fila(4, "すみません", "Perdón", estado="traducido")]})
-    r = po.exportar(str(textos), str(tmp_path / "po"), ("ja", "es"), "Prueba")
-    assert r == {"archivos": 1, "entradas": 4, "omitidas": 0}
+        _fila(4, "すみません", "Perdón", estado="traducido"),
+        _fila(5, "おはよう", "Buen día", estado="del parche")]}})
+    r = po.exportar(alm, str(tmp_path / "po"), "Prueba")
+    assert r == {"archivos": 1, "entradas": 5, "omitidas": 0}
     pf = polib.pofile(str(tmp_path / "po" / "data01.po"))
     e = {x.msgctxt: x for x in pf}
     assert e["esc:00001"].msgid == "こんにちは\nさん" and e["esc:00001"].msgstr == "Hola\nseñor"
     assert "fuzzy" in e["esc:00002"].flags and e["esc:00002"].tcomment == "dudoso" and pf.metadata["Language"] == "es"
-    # sin tocar nada: importar no cambia las hojas ni deja copia
-    assert po.importar([str(tmp_path / "po")], str(textos))["actualizadas"] == 0 and not (textos / "data01.xlsx.bak").exists()
-    # quien traduce: confirma la dudosa, traduce la vacía, corrige una y toca una entrada de otra versión del juego
+    # sin tocar nada: importar no cambia nada
+    assert po.importar([str(tmp_path / "po")], alm)["actualizadas"] == 0
+    # quien traduce: confirma la dudosa, traduce la vacía, corrige otra, cambia una nota y toca una entrada de otra versión
     e["esc:00002"].flags.remove("fuzzy")
     e["esc:00003"].msgstr = "Gracias"
     e["esc:00004"].msgstr = "Disculpe"; e["esc:00004"].flags.append("fuzzy")
-    e["esc:00001"].msgid = "otro texto"
+    e["esc:00005"].tcomment = "ok"
+    e["esc:00001"].msgid = "otro texto"; e["esc:00001"].msgstr = "Otra cosa"
     pf.append(polib.POEntry(msgctxt="no:00001", msgid="x", msgstr="y"))
     pf.save()
-    r = po.importar([str(tmp_path / "po")], str(textos))
+    # mientras tanto, en traduccion/ (por ejemplo, un git pull) alguien corrigió la 4: conflicto con el .po
+    filas = alm.leer()["data01"]["esc"]
+    filas[3]["traduccion"] = "Perdón, señor"
+    alm.guardar("data01", "esc", filas)
+    r = po.importar([str(tmp_path / "po")], alm)
     assert r["actualizadas"] == 3 and r["desconocidas"] == 1 and [k for k, _ in r["errores"]] == ["esc:00001"]
-    filas = {f["clave"]: f for f in hojas.read_xlsx(str(textos / "data01.xlsx"))["esc"]}
-    assert (filas["esc:00002"]["traduccion"], filas["esc:00002"]["estado"]) == ("Chau", "traducido")
-    assert (filas["esc:00003"]["traduccion"], filas["esc:00003"]["estado"]) == ("Gracias", "traducido")
-    assert (filas["esc:00004"]["traduccion"], filas["esc:00004"]["estado"]) == ("Disculpe", "revisar")
-    assert (filas["esc:00001"]["traduccion"], filas["esc:00001"]["estado"]) == ("Hola\nseñor", "del parche")    # rechazada
-    assert (textos / "data01.xlsx.bak").exists()
+    assert [k for k, _ in r["conflictos"]] == ["esc:00004"] and r["grupos"] == {"data01"}
+    f = {x["clave"]: x for x in alm.filas_por_escenario()["esc"]}
+    assert (f["esc:00002"]["traduccion"], f["esc:00002"]["estado"]) == ("Chau", "traducido")
+    assert (f["esc:00003"]["traduccion"], f["esc:00003"]["estado"]) == ("Gracias", "traducido")
+    assert (f["esc:00004"]["traduccion"], f["esc:00004"]["estado"]) == ("Perdón, señor", "traducido")   # conflicto: no se pisa
+    assert (f["esc:00005"]["nota"], f["esc:00005"]["estado"]) == ("ok", "del parche")                  # solo la nota
+    assert (f["esc:00001"]["traduccion"], f["esc:00001"]["estado"]) == ("Hola\nseñor", "del parche")  # rechazada
+
+
+def test_hojas_son_vistas_con_fusion_a_tres_bandas(tmp_path, monkeypatch):
+    """Lo editado en una hoja vuelve a traduccion/; si la fila también cambió en traduccion/ (git pull), es un conflicto."""
+    pytest.importorskip("openpyxl")
+    from tl_organizer.nucleo import flujo, hojas, proyecto as project
+    g = _juego_falso(tmp_path, monkeypatch)
+    proj, _ = project.init(str(g))
+    proj.almacen.escribir({"data01": {"esc": [_fila(1, "一", "uno", "del parche"), _fila(2, "二", "dos", "del parche"),
+                                              _fila(3, "三", "", "sin traducir")]}})
+    log = []
+    flujo.sincronizar(proj, log.append)                      # no había hojas: se generan
+    hoja = g / project.WORK / "hojas" / "data01.xlsx"
+    assert hojas.read_xlsx(str(hoja))["esc"][0]["base"]
+    # en la hoja: se corrige la 1 y se traduce la 3; en traduccion/: alguien cambió la 1 y la 2
+    sheets = hojas.read_xlsx(str(hoja))
+    sheets["esc"][0].update(traduccion="UNO", estado="traducido")
+    sheets["esc"][2].update(traduccion="tres", estado="traducido")
+    hojas.write_xlsx(str(hoja), sheets, huella=lambda r: r["base"])
+    filas = proj.almacen.leer()["data01"]["esc"]
+    filas[0]["traduccion"], filas[1]["traduccion"] = "Uno.", "Dos."
+    proj.almacen.guardar("data01", "esc", filas)
+    rep = flujo.sincronizar(proj, log.append)
+    assert rep["actualizadas"] == 1 and [k for k, _ in rep["conflictos"]] == ["esc:00001"]
+    f = proj.almacen.filas_por_escenario()["esc"]
+    assert [x["traduccion"] for x in f] == ["Uno.", "Dos.", "tres"]        # la 2 (solo cambió en traduccion/) no se revierte
+    assert any("CONFLICTO" in l for l in log)
+    assert hojas.read_xlsx(str(hoja))["esc"][0]["traduccion"] == "UNO"     # con conflicto, la hoja no se regenera
+    # se resuelve en la hoja (se acepta lo de traduccion/) y queda todo al día
+    sheets = hojas.read_xlsx(str(hoja))
+    sheets["esc"][0].update(traduccion="Uno.", estado="del parche")
+    hojas.write_xlsx(str(hoja), sheets, huella=lambda r: r["base"])
+    rep = flujo.sincronizar(proj, log.append)
+    assert not rep["conflictos"] and hojas.read_xlsx(str(hoja))["esc"][1]["traduccion"] == "Dos."
+    # un cambio que llega solo a traduccion/ (git pull) regenera la hoja aunque nadie la haya tocado
+    filas = proj.almacen.leer()["data01"]["esc"]
+    filas[2]["traduccion"] = "Tres."
+    proj.almacen.guardar("data01", "esc", filas)
+    flujo.sincronizar(proj, log.append)
+    assert hojas.read_xlsx(str(hoja))["esc"][2]["traduccion"] == "Tres."

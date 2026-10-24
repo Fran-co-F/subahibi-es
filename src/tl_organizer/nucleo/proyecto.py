@@ -25,7 +25,9 @@ VERSION = 2
 PERFIL_LEGADO = "subahibi-15th"
 SUBDIRS = {                      # nombre -> ruta dentro de la carpeta de trabajo
     "originales": "originales",           # PNG de la interfaz original
-    "texto": "texto",                     # hojas XLSX para traducir
+    "traduccion": "traduccion",           # LA traducción: un TSV por escenario (almacen.py), para versionar con git
+    "hojas": "hojas",                     # hojas XLSX para editar: vistas de traduccion/ (vistas.py)
+    "texto": "texto",                     # (proyectos viejos: hojas XLSX que se migran a traduccion/)
     "imagenes": "imagenes",               # estado.tsv de las imágenes
     "traducidas": os.path.join("imagenes", "traducidas"),   # imágenes ya traducidas (PNG/BMP)
     "indice": os.path.join("imagenes", "indice"),           # galería index.html
@@ -45,6 +47,20 @@ ESTADO_PLANTILLA = """\
 # Gana la primera regla que coincida. Las imágenes que pongas en imagenes/traducidas/ se marcan solas como traducidas.
 # Ejemplo (sacale el # del principio para usarlo):
 # SGTitle99000*\tdecidir\tel logo es parte de la ilustración
+"""
+
+
+GITIGNORE = """\
+# Para versionar la traducción con git:  git init  (en esta carpeta).  Se versiona traduccion/ (el texto),
+# imagenes/traducidas/ e imagenes/estado.tsv; lo demás se regenera con tl-organizer.
+originales/
+imagenes/indice/
+hojas/
+po/
+salida/
+jugable/
+backup/
+revision.tsv
 """
 
 
@@ -72,6 +88,11 @@ class Project:
         if self._motor is None:
             self._motor = motores.crear(self.perfil)
         return self._motor
+
+    @property
+    def almacen(self):
+        from .almacen import Almacen
+        return Almacen(self.dir("traduccion"), self.idiomas)
 
     @property
     def idiomas(self):
@@ -242,8 +263,12 @@ def init(folder, parche_viejo=None, log=print, destino=None):
         "creado": datetime.datetime.now().isoformat(timespec="seconds"),
     }, perfil)
     for name in SUBDIRS:
-        if name != "jugable":
+        if name not in ("jugable", "texto"):
             os.makedirs(proj.dir(name), exist_ok=True)
+    gi = os.path.join(proj.work, ".gitignore")
+    if not os.path.exists(gi):
+        with open(gi, "w", encoding="utf-8", newline="\n") as f:
+            f.write(GITIGNORE)
     if perfil.ejecutable:
         exe = os.path.join(folder, perfil.ejecutable)
         backup = os.path.join(proj.dir("backup"), perfil.ejecutable)

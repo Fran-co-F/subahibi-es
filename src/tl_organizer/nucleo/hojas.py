@@ -12,6 +12,7 @@ Columnas: clave, tipo, <idioma original>, <idioma de la traducción>, estado, no
 En XLSX los saltos de línea son saltos reales de celda; en TSV se escriben como \\n (y \\t, \\\\).
 """
 import hashlib
+import re
 
 COLUMNS = ["clave", "tipo", "original", "traduccion", "estado", "nota", "pos", "hash"]     # claves de cada fila
 ESTADOS = ["sin traducir", "traducido", "revisar", "del parche"]
@@ -42,16 +43,12 @@ def _esc(s):
     return s.replace("\\", "\\\\").replace("\t", "\\t").replace("\r", "").replace("\n", "\\n")
 
 
+_ESC = re.compile(r"\\(.)", re.S)
+_UNESC = {"n": "\n", "t": "\t", "\\": "\\"}
+
+
 def _unesc(s):
-    out, i = [], 0
-    while i < len(s):
-        c = s[i]
-        if c == "\\" and i + 1 < len(s):
-            n = s[i + 1]
-            out.append({"n": "\n", "t": "\t", "\\": "\\"}.get(n, "\\" + n)); i += 2
-        else:
-            out.append(c); i += 1
-    return "".join(out)
+    return _ESC.sub(lambda m: _UNESC.get(m.group(1), m.group(0)), s) if "\\" in s else s
 
 
 def write_tsv(path, rows, idiomas=IDIOMAS):
@@ -75,8 +72,8 @@ def read_tsv(path):
     return rows
 
 
-def write_xlsx(path, sheets, idiomas=IDIOMAS):
-    """sheets: {nombre_de_hoja: [filas]}"""
+def write_xlsx(path, sheets, idiomas=IDIOMAS, huella=None):
+    """sheets: {nombre_de_hoja: [filas]}.  huella(fila) -> str: agrega la columna oculta «base» (ver almacen.py)."""
     from openpyxl import Workbook
     from openpyxl.styles import Alignment, Font, PatternFill
     from openpyxl.worksheet.datavalidation import DataValidation
@@ -85,13 +82,16 @@ def write_xlsx(path, sheets, idiomas=IDIOMAS):
     widths = {"A": 22, "B": 11, "C": 60, "D": 60, "E": 13, "F": 24, "G": 9, "H": 10}
     for name, rows in sheets.items():
         ws = wb.create_sheet(title=name[:31])
-        ws.append(encabezado(idiomas))
+        ws.append(encabezado(idiomas) + (["base"] if huella else []))
         for c in ws[1]:
             c.font = Font(bold=True, color="FFFFFF"); c.fill = PatternFill("solid", fgColor="2E4057")
         for r in rows:
-            ws.append([r.get(c, "") if c != "pos" else r.get(c, "") for c in COLUMNS])
+            vals = [_celda(c, r.get(c, "")) for c in COLUMNS]
+            ws.append(vals + ([huella(r)] if huella else []))
         for col, w in widths.items():
             ws.column_dimensions[col].width = w
+        if huella:
+            ws.column_dimensions["I"].hidden = True
         wrap = Alignment(wrap_text=True, vertical="top")
         for row in ws.iter_rows(min_row=2, max_col=len(COLUMNS)):
             for c in row:
@@ -105,8 +105,13 @@ def write_xlsx(path, sheets, idiomas=IDIOMAS):
     wb.save(path)
 
 
+def _celda(col, v):
+    """La posición va como número (como en las hojas de siempre); lo demás, tal cual."""
+    return int(v) if col == "pos" and isinstance(v, str) and v.isdigit() else v
+
+
 def read_xlsx(path):
-    """-> {hoja: [filas]}"""
+    """-> {hoja: [filas]}.  Si la hoja es una vista con columna «base», cada fila trae también la clave "base"."""
     from openpyxl import load_workbook
     wb = load_workbook(path, read_only=True, data_only=True)
     out = {}
@@ -114,12 +119,13 @@ def read_xlsx(path):
         it = ws.iter_rows(values_only=True)
         head = [str(x) if x is not None else "" for x in next(it, [])]
         _check_head(head, f"{path}[{ws.title}]")
+        cols = COLUMNS + (["base"] if len(head) > len(COLUMNS) and head[len(COLUMNS)] == "base" else [])
         rows = []
         for vals in it:
             if vals is None or all(v is None for v in vals):
                 continue
-            vals = list(vals) + [None] * (len(COLUMNS) - len(vals))
-            rows.append({c: ("" if v is None else str(v)) for c, v in zip(COLUMNS, vals)})
+            vals = list(vals) + [None] * (len(cols) - len(vals))
+            rows.append({c: ("" if v is None else str(v)) for c, v in zip(cols, vals)})
         out[ws.title] = rows
     return out
 

@@ -28,6 +28,21 @@ def exportar(fuente, out_dir, tsv=False, xlsx=True, idiomas=hojas.IDIOMAS):
                 sin_texto=sin_texto)
 
 
+def agrupar(fuente):
+    """fuente: iterable de (grupo, escenario, filas) (Motor.textos()) -> ({grupo: {escenario: filas}}, informe).
+    Los escenarios sin filas se omiten (y se informan en «sin_texto»)."""
+    datos, total, prefilled, sin_texto = {}, 0, 0, []
+    for grupo, name, rows in fuente:
+        if not rows:
+            sin_texto.append(name)
+            continue
+        datos.setdefault(grupo, {})[name] = rows
+        total += len(rows)
+        prefilled += sum(1 for r in rows if r["estado"] != "sin traducir")
+    return datos, dict(scripts=sum(len(v) for v in datos.values()), arcs=len(datos), filas=total, precargadas=prefilled,
+                       sin_texto=sin_texto)
+
+
 def recolectar(paths):
     """{escenario: [filas]} a partir de archivos .xlsx / .tsv o carpetas con ellos (y su subcarpeta tsv/)."""
     files = []

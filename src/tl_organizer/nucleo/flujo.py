@@ -49,22 +49,25 @@ def exportar(proj, forzar=False, ocr=False, log=print):
 
 
 def _exportar_texto(proj, motor, forzar, rep, log):
-    from . import texto as txt
-    texto = proj.dir("texto")
-    hojas = glob.glob(os.path.join(texto, "*.xlsx"))
-    if hojas and not forzar:
-        log(f"texto: ya hay {len(hojas)} hojas en {texto}; NO se pisan (usá --forzar para exportar de nuevo; se guardará una copia)")
+    from . import texto as txt, vistas
+    alm = proj.almacen
+    sincronizar(proj, log)                                      # incluye la migración de proyectos con texto/*.xlsx
+    if alm.existe() and not forzar:
+        log(f"texto: ya está exportado en {alm.carpeta}; NO se pisa (usá --forzar para exportar de nuevo; se guardará una copia)")
         rep["texto"] = "conservado"
     else:
-        if hojas:
+        if alm.existe():
             dest = os.path.join(proj.dir("backup"), "texto-" + _stamp())
-            os.makedirs(dest)
-            for h in hojas:
-                shutil.move(h, dest)
-            log(f"texto: copia de las hojas anteriores en {dest}")
-        r = txt.exportar(motor.textos(proj.root, proj.parche_viejo), texto, idiomas=proj.idiomas)
+            shutil.copytree(alm.carpeta, os.path.join(dest, "traduccion"))
+            if os.path.isdir(proj.dir("hojas")):
+                shutil.move(proj.dir("hojas"), os.path.join(dest, "hojas"))
+            log(f"texto: copia de la traducción y las hojas anteriores en {dest}")
+        datos, r = txt.agrupar(motor.textos(proj.root, proj.parche_viejo))
+        alm.escribir(datos)
+        vistas.generar(alm, proj.dir("hojas"), log=log)
         rep["texto"] = r
-        log(f"texto: {r['scripts']} escenarios, {r['filas']} filas ({r['precargadas']} precargadas desde el parche viejo) en {texto}")
+        log(f"texto: {r['scripts']} escenarios, {r['filas']} filas ({r['precargadas']} precargadas desde el parche viejo) en {alm.carpeta}")
+        log(f"       hojas para editar: {proj.dir('hojas')}")
         if r["sin_texto"]:
             log(f"       ({len(r['sin_texto'])} escenarios sin texto que traducir no tienen hoja: guiones de configuración y finales)")
 
@@ -72,14 +75,14 @@ def _exportar_texto(proj, motor, forzar, rep, log):
 def build(proj, out, estados=base.ESTADOS_LISTOS, opciones=None, jugable=False, log=print):
     """Arma en 'out' lo que hay que copiar al juego: el motor aplica las hojas de texto y las imágenes traducidas.
     jugable=True agrega enlaces a los archivos del juego (carpeta de prueba que se ejecuta tal cual)."""
-    from . import enlaces, texto
+    from . import enlaces
     exe = proj.original_exe()
     rep = {"enlaces": 0, "metodos_enlace": {}}
     os.makedirs(out, exist_ok=True)
     if jugable:
         rep["enlaces"], rep["metodos_enlace"] = enlaces.link_game(proj.root, os.path.abspath(out), proj.perfil)
-    hojas = proj.dir("texto")
-    filas = texto.recolectar([hojas]) if glob.glob(os.path.join(hojas, "*.xlsx")) else None
+    sincronizar(proj, log)
+    filas = proj.almacen.filas_por_escenario() if proj.almacen.existe() else None
     trad = proj.dir("traducidas")
     imagenes = trad if os.path.isdir(trad) and os.listdir(trad) else None
     rep.update(proj.motor.construir(proj.root, out, filas, imagenes, estados, opciones or {}, proj.parche_viejo, exe, log))
@@ -116,26 +119,25 @@ def _tabla(titulo, filas, log, ancho):
 def estado(proj, log=print, nivel=0):
     """Resumen del proyecto y del avance de la traducción.  nivel 1: una tabla por archivo; nivel 2: además, por escenario.
     «listo» = filas «traducido» + «del parche», que es lo que `build` aplica por defecto."""
-    from . import hojas as sheet
+    sincronizar(proj, log)
     log(f"proyecto:        {proj.root}")
     log(f"juego:           {proj.perfil.nombre} (perfil {proj.perfil.id})")
     log(f"motor:           {proj.perfil.motor}" + (f", versión {proj.version}" if proj.version else ""))
     log(f"parche viejo:    {proj.parche_viejo or '(no configurado)'}")
-    hojas = sorted(glob.glob(os.path.join(proj.dir("texto"), "*.xlsx")))
-    if hojas:
+    if proj.almacen.existe():
         por_archivo = []                              # [(archivo, [(escenario, {estado: n})])]
         cnt = {}
-        for h in hojas:
+        for grupo, escenarios_ in proj.almacen.leer().items():
             escenarios = []
-            for nombre, rows in sheet.read_xlsx(h).items():
+            for nombre, rows in escenarios_.items():
                 c = {}
                 for r in rows:
                     c[r["estado"]] = c.get(r["estado"], 0) + 1
                     cnt[r["estado"]] = cnt.get(r["estado"], 0) + 1
                 escenarios.append((nombre, c))
-            por_archivo.append((os.path.splitext(os.path.basename(h))[0], escenarios))
+            por_archivo.append((grupo, escenarios))
         total = sum(cnt.values())
-        log(f"texto:           {total} filas en {len(hojas)} hojas   (listo {_pct(sum(cnt.get(k, 0) for k in LISTOS), total).strip()}: traducido + del parche)")
+        log(f"texto:           {total} filas en {len(por_archivo)} archivos   (listo {_pct(sum(cnt.get(k, 0) for k in LISTOS), total).strip()}: traducido + del parche)")
         for k in ESTADOS_TEXTO:
             if k in cnt:
                 log(f"                 {k:13} {cnt[k]:6}  ({100 * cnt[k] / total:.1f}%)")
@@ -160,16 +162,71 @@ def estado(proj, log=print, nivel=0):
 
 
 def revisar(proj, estados=None, fits=None, max_lineas=None, opciones=None, log=print):
-    """Corre los controles de calidad sobre las hojas del proyecto y escribe el informe en revision.tsv.  -> [Problema]"""
-    from . import hojas, revisar as rv
+    """Corre los controles de calidad sobre la traducción del proyecto y escribe el informe en revision.tsv.  -> [Problema]"""
+    from . import revisar as rv
+    sincronizar(proj, log)
     ctx = rv.Contexto(idiomas=proj.idiomas, motor=proj.motor, fits=fits, max_lineas=max_lineas, opciones=opciones or {})
     problemas = []
-    for h in sorted(glob.glob(os.path.join(proj.dir("texto"), "*.xlsx"))):
-        for rows in hojas.read_xlsx(h).values():
-            problemas += rv.revisar_filas(rows, ctx, estados or rv.ESTADOS)
+    for rows in proj.almacen.filas_por_escenario().values():
+        problemas += rv.revisar_filas(rows, ctx, estados or rv.ESTADOS)
     problemas.sort(key=lambda p: p.nivel != rv.ERROR)          # primero los errores de todas las hojas
     rv.escribir_tsv(proj.informe_revision, problemas)
     return problemas
+
+
+def sincronizar(proj, log=print):
+    """Trae a traduccion/ lo editado en las hojas (hojas/*.xlsx) y regenera las hojas que cambiaron.
+    La primera vez en un proyecto de antes del almacén (con texto/*.xlsx) migra esas hojas.  Los conflictos se informan
+    y esa hoja no se regenera (para no perder lo editado).  -> informe de Almacen.aplicar() (o None si no hay traducción)."""
+    from . import vistas
+    alm = proj.almacen
+    if not alm.existe():
+        _migrar(proj, log)
+        if not alm.existe():
+            return None
+    rep = vistas.importar(alm, proj.dir("hojas"))
+    if rep["actualizadas"]:
+        log(f"hojas: {rep['actualizadas']} filas editadas pasaron a {alm.carpeta}")
+    for k, v in rep["errores"][:10]:
+        log(f"ERROR hojas: {k} - {v}")
+    if rep["conflictos"]:
+        log(f"CONFLICTO: {len(rep['conflictos'])} filas cambiaron en la hoja y también en traduccion/ (no se tocaron):")
+        for k, v in rep["conflictos"][:10]:
+            log(f"  {k}: {v}")
+        log("  resolvelos en la hoja (copiá lo que quieras conservar) o borrá la hoja para regenerarla desde traduccion/")
+    con_conflicto = {k.rsplit(":", 1)[0] for k, _ in rep["conflictos"]}
+    escenarios = {g: set(e) for g, e in alm.escenarios().items()}
+    grupos = {g for g in rep["grupos"] | rep["desactualizadas"] if not (escenarios[g] & con_conflicto)}
+    faltan = {g for g in escenarios if not os.path.exists(os.path.join(proj.dir("hojas"), g + ".xlsx"))}
+    if grupos | faltan:
+        vistas.generar(alm, proj.dir("hojas"), grupos | faltan, log)
+    return rep
+
+
+def actualizar_vistas(proj, grupos=None, log=print):
+    """Después de cambiar traduccion/ (wrap, po-import…): regenera las hojas de esos grupos."""
+    from . import vistas
+    vistas.generar(proj.almacen, proj.dir("hojas"), grupos, log)
+
+
+def _migrar(proj, log):
+    """Proyectos de antes del almacén: las hojas de texto/ pasan a traduccion/ (y quedan copiadas en backup/)."""
+    from . import hojas
+    viejas = sorted(glob.glob(os.path.join(proj.dir("texto"), "*.xlsx")))
+    if not viejas:
+        return
+    datos = {}
+    for h in viejas:
+        grupo = os.path.splitext(os.path.basename(h))[0]
+        for rows in hojas.read_xlsx(h).values():
+            if rows:
+                datos.setdefault(grupo, {})[rows[0]["clave"].rsplit(":", 1)[0]] = rows
+    proj.almacen.escribir(datos)
+    dest = os.path.join(proj.dir("backup"), "texto-migrado-" + _stamp())
+    shutil.move(proj.dir("texto"), dest)
+    actualizar_vistas(proj, log=log)
+    log(f"migración: la traducción ahora vive en {proj.almacen.carpeta} (un archivo de texto por escenario, apto para git);")
+    log(f"           las hojas para editar están en {proj.dir('hojas')}; las anteriores quedaron en {dest}")
 
 
 def _manifest(proj):

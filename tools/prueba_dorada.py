@@ -60,11 +60,12 @@ def _hashes(work):
 def _texto(work):
     from openpyxl import load_workbook
     out = []
-    for p in sorted(glob.glob(os.path.join(work, "texto", "*.xlsx"))):
+    hojas = sorted(glob.glob(os.path.join(work, "hojas", "*.xlsx"))) or sorted(glob.glob(os.path.join(work, "texto", "*.xlsx")))
+    for p in hojas:                               # (texto/: versiones anteriores a traduccion/ + hojas/)
         wb = load_workbook(p, read_only=True)
         for ws in wb.worksheets:
             for row in ws.iter_rows(values_only=True):
-                out.append(f"{os.path.basename(p)} {ws.title} {row!r}")
+                out.append(f"{os.path.basename(p)} {ws.title} {row[:8]!r}")     # sin la columna oculta «base»
     return out
 
 

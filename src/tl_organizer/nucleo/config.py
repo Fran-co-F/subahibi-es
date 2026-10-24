@@ -2,7 +2,7 @@
 """Valores por defecto de los comandos, derivados del proyecto (ver proyecto.py).
 
 Los argumentos de la línea de comandos siempre mandan sobre estos valores.  Claves: juego, juego_es, parche_viejo,
-imagenes, texto, originales, indice, estado, idiomas.
+imagenes, traduccion, hojas, originales, indice, estado, idiomas.
 """
 import sys
 
@@ -18,7 +18,8 @@ def load():
         "juego_es": proj.dir("salida"),          # lo que hay que copiar al juego
         "parche_viejo": proj.parche_viejo,
         "imagenes": proj.dir("traducidas"),
-        "texto": proj.dir("texto"),
+        "traduccion": proj.dir("traduccion"),
+        "hojas": proj.dir("hojas"),
         "originales": proj.dir("originales"),
         "indice": proj.dir("indice"),
         "estado": proj.estado_tsv,

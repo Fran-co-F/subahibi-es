@@ -60,7 +60,8 @@ class Motor:
 
     def textos(self, juego, parche_viejo=None, archivos=None):
         """Genera (grupo, escenario, filas) con las filas de cada escenario (ver nucleo/hojas.py, COLUMNS).
-        grupo = el archivo del juego que contiene el escenario (una hoja XLSX por grupo)."""
+        grupo = el archivo del juego que contiene el escenario (una hoja XLSX por grupo).  La clave de cada fila tiene que
+        ser «<escenario>:<número>» y ser estable entre exportaciones: así se reconoce la fila en las vistas y en git."""
         raise NotImplementedError
 
     # ------------------------------------------------------------ armar

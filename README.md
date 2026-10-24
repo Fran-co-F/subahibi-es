@@ -53,7 +53,8 @@ Qué hace: **comprueba que la carpeta sea el juego** (un `BGI.exe` de una versi�
 
 | Carpeta (dentro de `tl-organizer-trabajo/`) | Para qué sirve |
 |---|---|
-| `texto/` | Las hojas Excel/LibreOffice donde se traduce. |
+| `traduccion/` | **La traducción**: un archivo de texto por escenario. Es lo que conviene versionar con git (ver [Versionar con git](#versionar-con-git)). |
+| `hojas/` | Las hojas Excel/LibreOffice donde se traduce: se generan desde `traduccion/` y lo que editás vuelve solo. |
 | `imagenes/traducidas/` | Las imágenes de interfaz ya traducidas (PNG o BMP). |
 | `imagenes/indice/` | La galería `index.html`. |
 | `imagenes/estado.tsv` | Tus decisiones sobre cada imagen («esta no se traduce»); arranca vacío, con instrucciones. |
@@ -72,14 +73,18 @@ tl-organizer exportar
 Hace todo el volcado sin que tengas que crear nada:
 1. Saca las **imágenes de interfaz** del juego a PNG (`originales/`).
 2. Arma la **galería** `imagenes/indice/index.html`.
-3. Exporta el **texto** a hojas (`texto/data01101.xlsx`, …; una hoja por escenario), con la traducción vieja precargada si diste el `.zip`. Los escenarios que no tienen nada que traducir (guiones de configuración y de finales, unos 14) no tienen hoja.
+3. Exporta el **texto** a `traduccion/` (un archivo por escenario) y arma las hojas para editarlo (`hojas/data01101.xlsx`, …; una pestaña por escenario), con la traducción
+   vieja precargada si diste el `.zip`. Los escenarios que no tienen nada que traducir (guiones de configuración y de finales, unos 14) no tienen hoja.
 
-**Es seguro repetirlo:** si ya hay hojas **no las pisa** (hay trabajo de traducción adentro). Para exportar de cero: `exportar --forzar` (guarda antes una copia en `backup/`).
+**Es seguro repetirlo:** si ya hay traducción **no la pisa** (hay trabajo adentro). Para exportar de cero: `exportar --forzar` (guarda antes una copia de `traduccion/` y de las hojas en `backup/`).
+
+*Proyectos de versiones anteriores* (con las hojas en `texto/`): el primer comando que se ejecute pasa esas hojas a `traduccion/`, arma las nuevas en `hojas/` y deja
+las anteriores en `backup/texto-migrado-<fecha>/`. No se pierde nada.
 
 ## 4. Traducir
 
 ### El texto
-Abrí las hojas de `texto/` con LibreOffice, Excel o Google Sheets. Cada fila es un texto del juego:
+Abrí las hojas de `hojas/` con LibreOffice, Excel o Google Sheets. Cada fila es un texto del juego:
 
 | Columna | Qué es |
 |---|---|
@@ -92,15 +97,18 @@ Abrí las hojas de `texto/` con LibreOffice, Excel o Google Sheets. Cada fila es
 - Un salto de línea dentro de una celda es un salto de línea del juego.
 - **`build` aplica por defecto las filas `traducido` y `del parche`.** Las `revisar` se dejan en japonés hasta que las confirmes.
 - Las columnas del texto llevan el nombre de cada idioma (`japones`, `espanol`). Para traducir a otro idioma: `init --idioma en` (o `pt`, `fr`…).
+- **Lo que guardás en las hojas pasa solo a `traduccion/`** la próxima vez que ejecutes cualquier comando (`estado`, `build`, `revisar`…). La hoja tiene una columna
+  oculta (`base`) que no hay que tocar: sirve para saber qué filas editaste. Si una fila cambió en la hoja **y también** en `traduccion/` (por ejemplo, después de un
+  `git pull`), no se pisa ninguna de las dos: aparece un **CONFLICTO** con la clave, lo resolvés en la hoja y listo. `text hojas` trae lo editado y regenera las hojas a mano.
 
 ### O con una herramienta de traducción (Poedit, OmegaT, Weblate, Lokalize…)
 ```
 tl-organizer text po-export      # un .po por hoja en tl-organizer-trabajo/po/
 … traducís con la herramienta …
-tl-organizer text po-import      # vuelve a las hojas (copia .bak de cada hoja la primera vez)
+tl-organizer text po-import      # vuelve a traduccion/ (y se regeneran las hojas)
 ```
 Cada entrada lleva la clave como contexto, el original y la traducción; las filas `revisar` salen marcadas como *dudosas* (fuzzy).
-Al importar: una entrada dudosa queda `revisar`; una traducción nueva o corregida queda `traducido`; una que no cambió conserva su estado;
+Al importar (con la misma protección contra conflictos que las hojas): una entrada dudosa queda `revisar`; una traducción nueva o corregida queda `traducido`; una que no cambió conserva su estado;
 una entrada vacía no borra nada. Hace falta `pip install -e ".[po]"`.
 
 ### Las imágenes
@@ -112,7 +120,7 @@ Abrí `tl-organizer-trabajo/imagenes/indice/index.html` en el navegador (doble c
 
 ## 5. Ajustar los saltos de línea — `text wrap` (opcional)
 
-**Cuándo:** después de traducir y **antes de `build`** (`build` lee las hojas tal como estén). El motor corta las líneas solo cuando una letra no entra en la ventana, a mitad de palabra;
+**Cuándo:** después de traducir y **antes de `build`**. El motor corta las líneas solo cuando una letra no entra en la ventana, a mitad de palabra;
 `text wrap` inserta saltos en los espacios para que ninguna línea pase de un ancho:
 
 ```
@@ -120,9 +128,10 @@ tl-organizer text wrap --max-caracteres 44 --max-lineas 3
 tl-organizer build
 ```
 
-- **Cerrá las hojas** en Excel/LibreOffice antes de correrlo: las reescribe (y si las tenés abiertas, lo que guardes después pisa el resultado).
-- **Antes de la primera corrida** deja una copia `data01101.xlsx.bak` al lado de cada hoja. Esa copia se hace una sola vez, así que siempre es la versión de **antes del primer wrap**.
-  Para volver atrás, copiala encima de la hoja.
+- Trabaja sobre `traduccion/` (primero trae lo que hayas editado en las hojas) y después regenera las hojas: **cerrá las hojas** en Excel/LibreOffice antes de correrlo.
+- **Antes de la primera corrida** deja una copia de `traduccion/` en `backup/traduccion-antes-de-wrap/`. Esa copia se hace una sola vez, así que siempre es la versión de
+  **antes del primer wrap**. (Con git, alcanza con volver al commit anterior.)
+- Con archivos explícitos (`text wrap HOJA.xlsx …`) trabaja sobre esos archivos, con una copia `.bak` al lado, como antes.
 - **Repetirlo es seguro** con el mismo ancho: los saltos que ya hay se respetan y solo se cortan las líneas nuevas o demasiado largas. Sirve para volver a pasarlo después de traducir más filas.
 - **Para cambiar el ancho, usá `--reflow`:** `tl-organizer text wrap --max-caracteres 38 --reflow`. Sin `--reflow` se respetan los saltos de la corrida anterior y las líneas quedan desparejas
   (por ejemplo una palabra suelta); con `--reflow` se descartan **todos** los saltos manuales —también los que puso quien traducía a propósito, como versos— y se corta de nuevo desde cero.
@@ -150,6 +159,19 @@ Revisa las filas `traducido`, `del parche` y `revisar` y muestra un resumen; el 
 | `saltos` | El original empieza o termina con un salto de línea y la traducción no (o al revés). |
 | `puntuacion` | `¿` sin `?` o `¡` sin `!` (solo si se traduce al español). |
 | `largo`, `lineas` | Con `--max-caracteres`/`--ancho` y `--max-lineas`, como en `text wrap`. |
+
+## Versionar con git
+
+La traducción vive en `traduccion/`: archivos de texto, una fila por línea, así que git muestra exactamente qué cambió y varias personas pueden trabajar
+en paralelo y fusionar. La carpeta de trabajo ya trae un `.gitignore` que deja afuera todo lo que se regenera (hojas, salida, galería, respaldos):
+
+```
+cd tl-organizer-trabajo
+git init
+git add .
+git commit -m "traducción inicial"
+```
+Después de un `git pull`, el próximo comando regenera las hojas que cambiaron (y avisa si alguna fila editada en tu hoja choca con lo que llegó).
 
 ## 6. Armar el parche — `build`
 
@@ -206,7 +228,8 @@ tl-organizer reset --todo     # borra también tl-organizer-trabajo/ (pide confi
 - **«no encuentro un BGI.exe original»:** el `BGI.exe` del juego ya fue reemplazado y no hay respaldo; restaurá el original (reinstalá el juego o verificá archivos) o ejecutá `desinstalar`.
 - **El juego se ve en japonés:** no se instaló el parche (`instalar`), o se copió sin el `BGI.exe` de `salida/`.
 - **Salen signos raros en vez de letras:** falta instalar la fuente (`SubaHibi07Inq`) o se mezclaron archivos de otro parche. El juego corre en UTF-8: **todos** los escenarios y el exe tienen que ser los de `salida/`.
-- **Perdí un cambio en una hoja:** `exportar` nunca pisa hojas; si usaste `--forzar`, la versión anterior está en `backup/texto-<fecha>/`.
+- **Perdí un cambio en una hoja:** `exportar` nunca pisa la traducción; si usaste `--forzar`, la versión anterior está en `backup/texto-<fecha>/`. Si apareció un CONFLICTO,
+  tu versión sigue en la hoja (no se regenera hasta que lo resuelvas).
 - **Windows:** `instalar` y `build` copian archivos (no usan enlaces). Solo `build --jugable` intenta enlaces simbólicos (en Windows exigen el modo desarrollador); si no puede, copia y avisa.
 
 ---
@@ -224,6 +247,7 @@ tl-organizer images index [ORIGINALES] [TRADUCIDAS] [SALIDA] [--estado TSV] [--o
 tl-organizer images import [ORIGEN] [CARPETA_DEL_JUEGO] [SALIDA]               # coloca imágenes traducidas en Graphic/CVTD
 tl-organizer text export [CARPETA_DEL_JUEGO] [SALIDA] [--parche-viejo ZIP] [--tsv]
 tl-organizer text import [CARPETA_DEL_JUEGO] [SALIDA] [HOJAS…] [--estados "traducido,del parche,revisar"]
+tl-organizer text hojas [--forzar]                              # trae lo editado en hojas/ y las regenera
 tl-organizer text po-export [--salida CARPETA] [--estados …]   /   tl-organizer text po-import [ARCHIVOS.po…]
 tl-organizer text wrap [HOJAS…] --max-caracteres N [--max-lineas M] [--ancho PX --fuente TTF --tamano PX] [--reflow] [--salida CARPETA]
 ```
@@ -299,7 +323,7 @@ La herramienta se está generalizando para cualquier novela visual (plan complet
 
 ```
 src/tl_organizer/   cli.py
-  nucleo/          proyecto, flujo, config, perfiles, texto, hojas, wrap, alineacion, revisar, po, enlaces, imagenes, galeria/ (index, _page, ocr)
+  nucleo/          proyecto, flujo, config, perfiles, texto, hojas, wrap, alineacion, almacen, vistas, revisar, po, enlaces, imagenes, galeria/ (index, _page, ocr)
   motores/         base (interfaz Motor), __init__ (registro)
     bgi/           arc, dsc, image, scn, exe_patch, oldpatch, build, cli, text/ (extract, export, import_, accents, align),
                    images/ (export, import_), juegos/ (perfiles TOML)

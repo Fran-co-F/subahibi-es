@@ -40,7 +40,7 @@ def cmd_exportar(a):
     workflow.exportar(project.require(), forzar=a.forzar, ocr=a.ocr)
     proj = project.require()
     print("\nahora podés traducir:")
-    print(f"  - texto:      abrí las hojas de {proj.dir('texto')} (LibreOffice, Excel…) y completá la columna «{hojas.nombre_idioma(proj.idiomas[1])}»")
+    print(f"  - texto:      abrí las hojas de {proj.dir('hojas')} (LibreOffice, Excel…) y completá la columna «{hojas.nombre_idioma(proj.idiomas[1])}»")
     print(f"  - imágenes:   abrí {os.path.join(proj.dir('indice'), 'index.html')} en el navegador; guardá las traducidas en {proj.dir('traducidas')}")
     print("cuando termines (o para probar):  tl-organizer build")
     return 0
@@ -84,8 +84,9 @@ def cmd_revisar(a):
     from collections import Counter
     from .nucleo import wrap
     proj = project.require()
-    if not os.path.isdir(proj.dir("texto")) or not any(f.endswith(".xlsx") for f in os.listdir(proj.dir("texto"))):
-        sys.exit("todavía no hay hojas: ejecutá «tl-organizer exportar»")
+    workflow.sincronizar(proj)
+    if not proj.almacen.existe():
+        sys.exit("todavía no hay traducción: ejecutá «tl-organizer exportar»")
     fits = wrap.make_fits(a.max_caracteres, a.ancho, a.fuente, a.tamano) if (a.max_caracteres or a.ancho) else None
     probs = workflow.revisar(proj, _estados(a.estados), fits, a.max_lineas)
     if a.solo:
@@ -111,7 +112,10 @@ def cmd_text_po_export(a):
     from .nucleo import po
     proj = project.require()
     dest = a.salida or proj.dir("po")
-    r = po.exportar(proj.dir("texto"), dest, proj.idiomas, proj.perfil.nombre, _estados(a.estados) if a.estados else None)
+    workflow.sincronizar(proj)
+    if not proj.almacen.existe():
+        sys.exit("todavía no hay traducción: ejecutá «tl-organizer exportar»")
+    r = po.exportar(proj.almacen, dest, proj.perfil.nombre, _estados(a.estados) if a.estados else None)
     print(f"{r['entradas']} entradas en {r['archivos']} archivos .po -> {dest}"
           + (f" ({r['omitidas']} filas omitidas)" if r["omitidas"] else ""))
     print("abrilos con Poedit, OmegaT, Lokalize o Weblate; para volver a las hojas:  tl-organizer text po-import")
@@ -121,13 +125,27 @@ def cmd_text_po_export(a):
 def cmd_text_po_import(a):
     from .nucleo import po
     proj = project.require()
-    r = po.importar(a.archivos or [proj.dir("po")], proj.dir("texto"), proj.idiomas)
+    workflow.sincronizar(proj)
+    r = po.importar(a.archivos or [proj.dir("po")], proj.almacen)
+    workflow.actualizar_vistas(proj, r["grupos"])
     for k, v in r["errores"][:20]:
         print("ERROR:", k, "-", v)
-    print(f"{r['actualizadas']} filas actualizadas, {r['sin_cambios']} sin cambios, {len(r['errores'])} errores"
-          + (f", {r['desconocidas']} entradas que no están en las hojas" if r["desconocidas"] else "")
-          + ("; copia de cada hoja modificada: <hoja>.xlsx.bak (la primera vez)" if r["actualizadas"] else ""))
-    return 1 if r["errores"] else 0
+    for k, v in r["conflictos"][:20]:
+        print("CONFLICTO:", k, "-", v)
+    print(f"{r['actualizadas']} filas actualizadas, {len(r['conflictos'])} conflictos, {len(r['errores'])} errores"
+          + (f", {r['desconocidas']} entradas que no están en el proyecto" if r["desconocidas"] else ""))
+    return 1 if r["errores"] or r["conflictos"] else 0
+
+
+def cmd_text_hojas(a):
+    proj = project.require()
+    workflow.sincronizar(proj)
+    if not proj.almacen.existe():
+        sys.exit("todavía no hay traducción: ejecutá «tl-organizer exportar»")
+    if a.forzar:
+        workflow.actualizar_vistas(proj)
+    print(f"hojas al día en {proj.dir('hojas')}")
+    return 0
 
 
 def cmd_instalar(a):
@@ -174,13 +192,43 @@ def cmd_images_index(a):
     return 0
 
 
+def _wrap_proyecto(a, fits):
+    """text wrap sin archivos: sobre la traducción del proyecto (traduccion/), y después se regeneran las hojas."""
+    from .nucleo import wrap
+    proj = project.require()
+    workflow.sincronizar(proj)
+    alm = proj.almacen
+    if not alm.existe():
+        sys.exit("todavía no hay traducción: ejecutá «tl-organizer exportar»")
+    copia = os.path.join(proj.dir("backup"), "traduccion-antes-de-wrap")
+    if not a.sin_copia and not os.path.exists(copia):
+        shutil.copytree(alm.carpeta, copia)
+    tot_c = tot_o = 0
+    grupos = set()
+    for grupo, escenarios in alm.leer().items():
+        for esc, rows in escenarios.items():
+            c, o = wrap.wrap_rows(rows, fits, _estados(a.estados), a.reflow, a.max_lineas)
+            tot_c += c
+            tot_o += o
+            if c or o:
+                alm.guardar(grupo, esc, rows)
+                grupos.add(grupo)
+    workflow.actualizar_vistas(proj, grupos)
+    print(f"{tot_c} textos con saltos de línea nuevos"
+          + (f"; {tot_o} con más de {a.max_lineas} líneas (marcados en «nota»)" if a.max_lineas else "")
+          + ("" if a.sin_copia else f"; copia de la traducción de antes del primer wrap: {copia}"))
+    return 0
+
+
 def cmd_text_wrap(a):
     from .nucleo import hojas as sheet, wrap
     if not (a.max_caracteres or a.ancho):
         sys.exit("indicá --max-caracteres N y/o --ancho PX (con --fuente y --tamano)")
     fits = wrap.make_fits(a.max_caracteres, a.ancho, a.fuente, a.tamano)
+    if not a.hojas:
+        return _wrap_proyecto(a, fits)
     files = []
-    for p in a.hojas or [need(None, "texto", "las hojas")]:
+    for p in a.hojas:
         if os.path.isdir(p):
             files += [os.path.join(p, f) for f in sorted(os.listdir(p)) if f.lower().endswith(".xlsx")]
         else:
@@ -270,15 +318,18 @@ def _parser():
     p.set_defaults(f=cmd_images_index)
     tx = sub.add_parser("text", help="(suelto) texto de los escenarios").add_subparsers(dest="sub", required=True, metavar="subcomando")
     p = tx.add_parser("wrap", help="inserta saltos de línea manuales en las hojas, cortando en límites de palabra")
-    p.add_argument("hojas", nargs="*", help=".xlsx / .tsv o carpetas (por defecto, la carpeta «texto» del proyecto)")
+    p.add_argument("hojas", nargs="*", help=".xlsx / .tsv o carpetas (por defecto, la traducción del proyecto)")
     p.add_argument("--max-caracteres", type=int, metavar="N", help="largo máximo de línea en caracteres")
     p.add_argument("--ancho", type=int, metavar="PX", help="ancho máximo en píxeles (medido con --fuente y --tamano)")
     p.add_argument("--fuente", metavar="TTF"); p.add_argument("--tamano", type=int, metavar="PX")
     p.add_argument("--max-lineas", type=int, metavar="M", help="solo avisa: anota en «nota» los textos que pasen de M líneas")
     p.add_argument("--estados", default="traducido,del parche,revisar", help="estados a procesar")
     p.add_argument("--reflow", action="store_true", help="primero descarta los saltos manuales existentes y vuelve a cortar")
-    p.add_argument("--salida", metavar="CARPETA", help="escribir las hojas nuevas acá (por defecto, en el lugar con copia .bak)")
+    p.add_argument("--salida", metavar="CARPETA", help="con archivos: escribir los nuevos acá (por defecto, en el lugar con copia .bak)")
     p.add_argument("--sin-copia", action="store_true"); p.set_defaults(f=cmd_text_wrap)
+    p = tx.add_parser("hojas", help="trae lo editado en las hojas y las regenera desde traduccion/")
+    p.add_argument("--forzar", action="store_true", help="regenera todas las hojas (descarta lo que tengan sin traer, salvo lo que ya se trajo)")
+    p.set_defaults(f=cmd_text_hojas)
     p = tx.add_parser("po-export", help="exporta las hojas a archivos .po (Poedit, OmegaT, Weblate…)")
     p.add_argument("--salida", metavar="CARPETA", help="por defecto, la carpeta «po» del proyecto")
     p.add_argument("--estados", help="solo filas con estos estados (por defecto, todas)")

@@ -285,9 +285,7 @@ python tools/prueba_dorada.py JUEGO /tmp/dorada-rama --parche-viejo ZIP --refere
 ## 4. Riesgos y decisiones abiertas
 
 Decisiones abiertas de la fase 2:
-- **¿Dónde vive la traducción?** Hoy, en las hojas XLSX (cómodas, pero binarias: git no muestra diferencias y dos personas no pueden fusionar).
-  Opciones: (a) seguir con XLSX y usar PO para colaborar; (b) archivos de texto por escenario como fuente de verdad y XLSX/PO como vistas.
-  La (b) es mejor para la GUI y la colaboración, pero cambia la costumbre de trabajo: decidirlo antes de la fase 5.
+- (Resuelto) **¿Dónde vive la traducción?** En archivos de texto por escenario (`traduccion/`), con XLSX y PO como vistas.
 
 Notas que dejó la fase 1:
 - Las opciones de `build` y los comandos sueltos de cada motor se registran en el mismo `argparse`: con dos motores que definan
@@ -312,13 +310,15 @@ Notas que dejó la fase 1:
   - [x] CLI con los mismos comandos; `build` y los comandos sueltos toman opciones de cada motor
   - [x] pruebas: 33 (perfiles, registro, motor de prueba como plugin que hace todo el flujo)
   - [x] prueba dorada idéntica a `main` (3084 archivos, 98 983 filas, galería, `--jugable`, `patch-exe`, `text export`)
-- [ ] **Fase 2** — modelo de datos genérico *(en curso)*
+- [ ] **Fase 2** — modelo de datos genérico *(falta solo el contexto por fila)*
   - [x] filas con claves genéricas (`original`/`traduccion`); encabezados de las hojas según los idiomas del proyecto (`init --idioma`);
         las hojas existentes se siguen leyendo y con japonés → español no cambia nada
   - [x] `tl-organizer revisar`: controles generales + ganchos del motor (`marcadores`, `caracteres_invalidos`, `controles`); informe `revision.tsv`
   - [x] `text po-export` / `text po-import` (con `polib`), ida y vuelta probada sobre las 98 867 filas reales
   - [ ] contexto por fila (hablante, línea anterior/siguiente) — el motor BGI tiene que identificar el comando de nombre
-  - [ ] almacenamiento por escenario como fuente de verdad (decisión abierta, ver sección 4)
+  - [x] la traducción vive en `traduccion/<grupo>/<escenario>.tsv` (apto para git); `hojas/*.xlsx` y `po/*.po` son vistas con
+        fusión a tres bandas por fila (huella oculta en cada vista): lo editado vuelve solo y los conflictos se informan sin pisar nada;
+        migración automática de los proyectos con `texto/*.xlsx`; `.gitignore` en la carpeta de trabajo
   - [x] nombre del proyecto: **tl-organizer** (paquete `tl_organizer`; `subahibi-es` queda como alias y los proyectos viejos se abren)
 - [ ] Fase 3 — kit de motores: `MotorTextoPlano`, tabla de cadenas, `MotorExterno`, contenedores, codificaciones, prueba de contrato
 - [ ] Fase 4 — Kirikiri y tercer motor, interfaz `Motor` v1
