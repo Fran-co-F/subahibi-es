@@ -165,6 +165,41 @@ def cmd_desinstalar(a):
     return 0
 
 
+def cmd_traza(a):
+    """Ejecuta el juego anotando qué archivos abre, busca y escribe (ver nucleo/traza.py)."""
+    from .nucleo import traza
+    proj = project.find() if not a.juego else None
+    juego = os.path.abspath(a.juego or (proj.root if proj else os.getcwd()))
+    exe = a.exe or (proj.perfil.ejecutable if proj else None)
+    if not exe:
+        sys.exit("indicá el ejecutable del juego con --exe (o ejecutá el comando dentro de un proyecto)")
+    if not os.path.isfile(os.path.join(juego, exe)):
+        sys.exit(f"no existe {os.path.join(juego, exe)}")
+    env = {}
+    for e in a.env or []:
+        k, sep, v = e.partition("=")
+        if not sep:
+            sys.exit(f"--env espera CLAVE=VALOR: {e}")
+        env[k] = v
+    destino = a.salida or (proj.dir("trazas") if proj else os.getcwd())
+    os.makedirs(destino, exist_ok=True)
+    sello = workflow._stamp()
+    accesos, como = traza.ejecutar(juego, exe, procmon=a.procmon, segundos=a.segundos,
+                                   guardar_traza=os.path.join(destino, f"traza-{sello}.log"),
+                                   **({} if sys.platform == "win32" else dict(wine=a.wine, prefijo=a.prefijo, env=env)))
+    if not accesos:
+        sys.exit("la traza está vacía: el juego no llegó a abrir archivos (¿arrancó bien? probá con más --segundos)")
+    entradas = proj.motor.entradas(juego) if proj else set()
+    salida = proj.dir("salida") if proj and not a.sin_parche else None
+    rep = traza.analizar(accesos, juego, entradas, salida, exe)
+    rep["como"] = como
+    traza.informe(rep)
+    ruta = os.path.join(destino, f"traza-{sello}.json")
+    traza.guardar(rep, ruta)
+    print(f"\ninforme completo: {ruta}")
+    return 0
+
+
 def cmd_reset(a):
     proj = project.require()
     if os.path.exists(os.path.join(proj.dir("backup"), "instalado.json")) and not a.forzar:
@@ -318,6 +353,18 @@ def _parser():
     p.set_defaults(f=cmd_instalar)
     p = sub.add_parser("desinstalar", help="deshace «instalar»: restaura el juego como estaba")
     p.set_defaults(f=cmd_desinstalar)
+
+    p = sub.add_parser("traza", help="ejecuta el juego y muestra qué archivos lee, busca y escribe (¿lee el parche?)")
+    p.add_argument("juego", nargs="?", help="carpeta del juego (por defecto, la del proyecto)")
+    p.add_argument("--exe", help="ejecutable, relativo a la carpeta del juego (por defecto, el del perfil)")
+    p.add_argument("--segundos", type=int, default=0, help="cerrar el juego solo después de N segundos (por defecto, esperar a que lo cierres)")
+    p.add_argument("--salida", metavar="CARPETA", help="dónde guardar la traza y el informe (por defecto, «trazas» del proyecto)")
+    p.add_argument("--sin-parche", action="store_true", help="no comparar con la carpeta «salida» del proyecto")
+    p.add_argument("--wine", metavar="RUTA", help="(Linux/macOS) binario de Wine; por defecto el de Lutris para este juego, o el del PATH")
+    p.add_argument("--prefijo", metavar="CARPETA", help="(Linux/macOS) WINEPREFIX; por defecto el de Lutris, o el que contiene al juego")
+    p.add_argument("--env", action="append", metavar="CLAVE=VALOR", help="(Linux/macOS) variable de entorno extra, p. ej. LANG=ja_JP.UTF-8")
+    p.add_argument("--procmon", metavar="RUTA", help="(Windows) Procmon.exe de Sysinternals, para grabar los accesos")
+    p.set_defaults(f=cmd_traza)
 
     p = sub.add_parser("reset", help="borra el proyecto (el JSON; con --todo, también la carpeta de trabajo)")
     p.add_argument("--todo", action="store_true", help="borra también la carpeta de trabajo (hojas, imágenes traducidas, respaldos)")

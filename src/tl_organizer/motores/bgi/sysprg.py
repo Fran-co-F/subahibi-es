@@ -8,9 +8,11 @@ el parche de Sakura no Uta de Taikutsu Translation):
     graphcall 91:88  (dibujar texto)       el 2.º argumento contando desde abajo
     graphcall 92:9C  (formato de texto)    el 9.º argumento contando desde abajo (el 12.º es el tamaño de letra)
 
-Cuando el argumento es `push 0` se cambia por `push 1`.  Cuando se lee de memoria (base + desplazamiento, como la preferencia
-que inicializa userdata._bp), se busca en todos los programas dónde se guarda un `push 0` en esa misma dirección y se cambia
-por 1.  Los programas modificados van sin comprimir a Script/CVTD (el motor los prefiere a los de sysprg.arc).
+Cuando el argumento es `push 0` se cambia por `push 1`.  Cuando se lee de memoria (base + desplazamiento: la preferencia
+de modo proporcional, que en DESIRE usa la ventana de mensajes), la lectura se reemplaza por una expresión que vale 1 y
+ocupa los mismos bytes (así no se mueve ningún salto): la preferencia viene de los datos guardados, y si el jugador ya tenía
+el juego configurado conservaría el 0.  Además se cambia a 1 el valor inicial (dónde se guarda un `push 0` en esa misma
+dirección).  Los programas modificados van sin comprimir a Script/CVTD (el motor los prefiere a los de sysprg.arc).
 
 Formato (observado): cabecera de 16 bytes (u32 tamaño de la cabecera, u32 tamaño del código) y el código: un byte de opcode
 y sus operandos.  Para separar argumentos solo hace falta el efecto en la pila de unas pocas instrucciones; si en los
@@ -77,6 +79,24 @@ def _direccion(arg):
     return None
 
 
+def constante(largo, valor=1):
+    """Bytes de código que dejan 'valor' en la pila y ocupan exactamente 'largo' bytes: un push y pares «push 0, add»
+    (push8 = 2 bytes, push16 = 3, push32 = 5, add = 1).  None si no se puede con ese largo."""
+    pushes = {2: b"\x00" + bytes([valor]), 3: b"\x01" + valor.to_bytes(2, "little"), 5: b"\x02" + valor.to_bytes(4, "little")}
+    ceros = {3: b"\x00\x00\x20", 4: b"\x01\x00\x00\x20", 6: b"\x02\x00\x00\x00\x00\x20"}
+    for t, primero in pushes.items():
+        resto, out = largo - t, primero
+        if resto < 0:
+            continue
+        for n in (6, 4, 3):                      # relleno goloso; con 3, 4 y 6 se cubre todo resto >= 3
+            while resto - n >= 0 and (resto - n == 0 or resto - n >= 3):
+                out += ceros[n]
+                resto -= n
+        if resto == 0:
+            return out
+    return None
+
+
 def parchear_proporcional(programas):
     """programas: {nombre: bytes}.  -> ({nombre: bytes modificados}, informe).
     informe = {"cambios": [(programa, posición, qué)], "omitidas": [(programa, posición, motivo)]}"""
@@ -101,6 +121,14 @@ def parchear_proporcional(programas):
                 rep["cambios"].append((n, arg[0][0], f"{nombre}: argumento {cual} push 0 -> push 1"))
             elif _direccion(arg):
                 direcciones.add(_direccion(arg))
+                ini = arg[0][0]
+                fin = arg[-1][0] + 1 + len(arg[-1][2])
+                nuevo = constante(fin - ini)
+                if nuevo is None:
+                    rep["omitidas"].append((n, pos, f"{nombre}: la lectura de la preferencia no se puede reemplazar"))
+                else:
+                    nuevos[n][ini:fin] = nuevo
+                    rep["cambios"].append((n, ini, f"{nombre}: argumento {cual} leído de la preferencia -> 1 fijo"))
     # preferencias: «<dirección> push8 0 move(tamaño)» -> push8 1
     for n, ins in tablas.items():
         for k in range(len(ins) - 1):

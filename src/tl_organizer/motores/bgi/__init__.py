@@ -14,6 +14,8 @@ exe_patch.py (parche del exe).  Opciones del perfil, sección [bgi]:
                                      texto proporcional con un desvío en el exe ([[bgi.ejecutables]] con «hook») o
                                      parcheando los programas de sistema (sysprg.py; versiones viejas).  Por defecto, exe.
     programas = ["sysprg.arc"]       dónde están los programas de sistema
+    sueltos = "carpetas" | "raiz"    dónde busca el motor los archivos sueltos que tapan a los .arc: <Tipo>/CVTD
+                                     (lo habitual) o la carpeta del juego (ver sueltos.py).  Por defecto, carpetas.
 
 Valores por defecto si el perfil no los indica: [texto] archivos = ["data0*.arc"], [imagenes] archivos = ["sysgrp.arc"].
 """
@@ -21,7 +23,7 @@ import os
 import re
 
 from ..base import EJECUTABLE, IMAGENES, PARCHE_VIEJO, TEXTO, ESTADOS_LISTOS, Motor, MotorError
-from . import exe_patch
+from . import exe_patch, sueltos
 
 DATA_ARCS = ("data0*.arc",)
 UI_ARCS = ("sysgrp.arc",)
@@ -46,6 +48,8 @@ class MotorBGI(Motor):
             raise MotorError(f"{self.perfil.ruta or self.perfil.id}: [bgi] modo tiene que ser «utf8» o «katakana»")
         if self.opciones.get("proporcional", "exe") not in ("exe", "programas", "no"):
             raise MotorError(f"{self.perfil.ruta or self.perfil.id}: [bgi] proporcional tiene que ser «exe», «programas» o «no»")
+        if self.sueltos not in sueltos.MODOS:
+            raise MotorError(f"{self.perfil.ruta or self.perfil.id}: [bgi] sueltos tiene que ser «carpetas» o «raiz»")
         fuente = self.opciones.get("fuente")
         if fuente is not None:
             try:
@@ -56,6 +60,10 @@ class MotorBGI(Motor):
     @property
     def fuente(self):
         return self.opciones.get("fuente")
+
+    @property
+    def sueltos(self):
+        return self.opciones.get("sueltos", sueltos.CARPETAS)
 
     @property
     def utf8(self):
@@ -97,6 +105,17 @@ class MotorBGI(Motor):
         from .text import export
         return export.textos(juego, parche_viejo, archivos, self.data_arcs)
 
+    def entradas(self, juego):
+        from .arc import Arc
+        nombres = set()
+        for p in sorted(os.listdir(juego)):
+            if p.lower().endswith(".arc"):
+                try:
+                    nombres.update(Arc(os.path.join(juego, p)).names())
+                except (OSError, ValueError):
+                    pass
+        return nombres
+
     # ------------------------------------------------------------ armar
     def construir(self, juego, salida, filas=None, imagenes=None, estados=ESTADOS_LISTOS, opciones=None,
                   parche_viejo=None, ejecutable=None, log=print):
@@ -107,10 +126,10 @@ class MotorBGI(Motor):
                            exe_name=self.perfil.ejecutable, builds=self.builds,
                            data_arcs=self.data_arcs, ui_arcs=self.ui_arcs,
                            proporcional=self.opciones.get("proporcional", "exe"),
-                           sys_arcs=tuple(self.opciones.get("programas", ["sysprg.arc"])), log=log)
+                           sys_arcs=tuple(self.opciones.get("programas", ["sysprg.arc"])), sueltos=self.sueltos, log=log)
 
     def releer(self, juego, salida):
-        """Los textos que mostraría el juego con salida/Script/CVTD encima (los escenarios sueltos tapan los del .arc)."""
+        """Los textos que mostraría el juego con los escenarios sueltos de 'salida' encima (tapan los del .arc)."""
         from . import scn
         from .text import accents, export, extract
 
@@ -121,7 +140,7 @@ class MotorBGI(Motor):
                 return accents.decode(raw)              # modo katakana o escenario sin tocar (Shift-JIS)
         for arc, name, jp in export.scenarios(juego, patrones=self.data_arcs):
             filas = export.script_rows(name, jp)
-            suelto = os.path.join(salida, "Script", "CVTD", name)
+            suelto = os.path.join(sueltos.carpeta(salida, "Script", self.sueltos), name)
             if os.path.exists(suelto):
                 with open(suelto, "rb") as f:
                     nuevo = scn.parse(f.read(), strings_start=scn.parse(jp).strings_start)

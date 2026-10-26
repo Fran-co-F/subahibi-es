@@ -7,7 +7,7 @@ carpeta raíz).  Los de Script/CVTD son escenarios (para precargar el español) 
 import os
 import re
 import zipfile
-from . import scn
+from . import scn, sueltos
 
 LOOSE = re.compile(r"(?:^|/)(Script|Graphic|Sound|Voice)/CVTD/([^/]+)$")
 
@@ -51,15 +51,15 @@ class OldPatch:
                 out[name] = self.read(inner)
         return out
 
-    def copy_loose(self, dest, skip=lambda kind, name, head: False):
-        """Copia los archivos sueltos a dest/<carpeta>/CVTD/.  skip(kind, nombre, primeros_bytes) -> True para omitir.
+    def copy_loose(self, dest, skip=lambda kind, name, head: False, modo="carpetas"):
+        """Copia los archivos sueltos a dest/<carpeta>/CVTD/ (o a dest con modo="raiz", ver sueltos.py).  skip(kind, nombre, primeros_bytes) -> True para omitir.
         Devuelve {'copiados': n, 'omitidos': [(carpeta, nombre)]}."""
         copied, skipped = 0, []
         for kind, name, inner in self.files():
             head = self.read(inner, 32)
             if skip(kind, name, head):
                 skipped.append((kind, name)); continue
-            d = os.path.join(dest, kind, "CVTD")
+            d = sueltos.carpeta(dest, kind, modo)
             os.makedirs(d, exist_ok=True)
             with open(os.path.join(d, name), "wb") as f:
                 f.write(self.read(inner))

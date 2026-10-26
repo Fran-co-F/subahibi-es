@@ -35,6 +35,7 @@ SUBDIRS = {                      # nombre -> ruta dentro de la carpeta de trabaj
     "salida": "salida",                   # lo que hay que copiar al juego
     "jugable": "jugable",                 # carpeta de prueba con enlaces (build --jugable)
     "po": "po",                           # archivos .po para herramientas de traducción (text po-export)
+    "trazas": "trazas",                   # trazas de archivos del juego (tl-organizer traza)
 }
 
 

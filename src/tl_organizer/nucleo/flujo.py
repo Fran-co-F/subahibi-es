@@ -240,6 +240,14 @@ def _files(src):
             yield os.path.relpath(full, src), full
 
 
+def _borrar_carpetas_vacias(proj):
+    """Las carpetas sueltas del motor (Script/, Graphic/…) que quedaron vacías tras sacar archivos del parche."""
+    for d in proj.motor.carpetas_sueltas:
+        for root, _dirs, _files in os.walk(os.path.join(proj.root, d), topdown=False):
+            if not os.listdir(root):
+                os.rmdir(root)
+
+
 def instalar(proj, log=print):
     """Copia lo que dejó `build` (carpeta salida) sobre la instalación del juego.  Lo que se pisa se guarda en
     backup/instalado/ para poder volver atrás con desinstalar."""
@@ -273,6 +281,7 @@ def instalar(proj, log=print):
         if os.path.exists(p):
             os.remove(p)
         del manifest[key]
+    _borrar_carpetas_vacias(proj)
     with open(mpath, "w", encoding="utf-8") as f:
         json.dump(manifest, f, ensure_ascii=False, indent=1)
     log(f"{n} archivos copiados a {proj.root} ({sum(1 for v in manifest.values() if v == 'reemplazado')} originales respaldados)")
@@ -298,9 +307,6 @@ def desinstalar(proj, log=print):
         else:
             shutil.copy2(os.path.join(bdir, rel), dst)
             restaurados += 1
-    for d in proj.motor.carpetas_sueltas:                                   # carpetas que quedaron vacías
-        for root, dirs, files in os.walk(os.path.join(proj.root, d), topdown=False):
-            if not os.listdir(root):
-                os.rmdir(root)
+    _borrar_carpetas_vacias(proj)
     os.remove(mpath)
     log(f"{borrados} archivos borrados, {restaurados} originales restaurados")

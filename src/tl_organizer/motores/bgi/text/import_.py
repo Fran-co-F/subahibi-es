@@ -7,7 +7,7 @@ final de la tabla de cadenas.  Como los operandos son desplazamientos desde el i
 cadenas nuevas van al final, nada se reubica: saltos, exportaciones y demás operandos quedan intactos.
 """
 import os
-from .. import scn
+from .. import scn, sueltos as sueltos_mod
 from ...kit.cadenas import TablaDeCadenas
 from ....nucleo import hojas
 from . import accents, extract
@@ -96,11 +96,12 @@ def build_script(name, jp_bytes, rows, estados=APLICAR, utf8=False):
     return out, dict(cambiadas=changed, omitidas=skipped, errores=errs, sin_convertir=unconverted)
 
 
-def apply_rows(game_dir, data, out_game_dir, estados=APLICAR, utf8=False, patrones=DATA_ARCS):
-    """data = {escenario: [filas]}.  Escribe out_game_dir/Script/CVTD/<escenario> para los que cambian.
+def apply_rows(game_dir, data, out_game_dir, estados=APLICAR, utf8=False, patrones=DATA_ARCS, sueltos="carpetas"):
+    """data = {escenario: [filas]}.  Escribe out_game_dir/Script/CVTD/<escenario> (o out_game_dir/<escenario> con
+    sueltos="raiz", ver sueltos.py) para los que cambian.
     Con utf8=True se escriben TODOS los escenarios del juego (también los sin traducir), porque el motor en
     modo UTF-8 necesita todas las cadenas en UTF-8."""
-    dest = os.path.join(out_game_dir, "Script", "CVTD")
+    dest = sueltos_mod.carpeta(out_game_dir, "Script", sueltos)
     os.makedirs(dest, exist_ok=True)
     total = dict(scripts=0, cambiadas=0, omitidas=0, errores=[], sin_convertir=0)
     seen = set()

@@ -7,7 +7,7 @@ El motor da prioridad a los archivos sueltos sobre los .arc; el archivo suelto e
 import os
 from PIL import Image
 from ..arc import Arc
-from .. import dsc, image
+from .. import dsc, image, sueltos as sueltos_mod
 from ....nucleo.imagenes import open_any
 
 LOOSE_DIR = os.path.join("Graphic", "CVTD")        # ruta fijada por los programas del juego (system.arc:ipl._bp)
@@ -28,7 +28,7 @@ def _reference_sizes(arcs, wanted):
     return out
 
 
-def import_images(src_dir, arcs, out_game_dir, log=print):
+def import_images(src_dir, arcs, out_game_dir, log=print, sueltos="carpetas"):
     """Devuelve (colocadas, avisos, errores)."""
     files = {}
     for f in sorted(os.listdir(src_dir)):
@@ -38,7 +38,7 @@ def import_images(src_dir, arcs, out_game_dir, log=print):
         elif not ext and os.path.isfile(os.path.join(src_dir, f)):
             files[f] = os.path.join(src_dir, f)          # ya es un archivo suelto (sin extensión)
     ref = _reference_sizes(arcs, list(files))
-    dest = os.path.join(out_game_dir, LOOSE_DIR)
+    dest = sueltos_mod.carpeta(out_game_dir, "Graphic", sueltos)
     os.makedirs(dest, exist_ok=True)
     placed, warns, errs = [], [], []
     for name, path in files.items():

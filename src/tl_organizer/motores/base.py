@@ -73,6 +73,11 @@ class Motor:
         para el texto, informe["texto"] = {"scripts", "cambiadas", "omitidas", "errores": [(clave, motivo)]}."""
         raise NotImplementedError
 
+    def entradas(self, juego):
+        """Nombres de los archivos guardados dentro de los contenedores del juego (los .arc de BGI, …).  Opcional: lo
+        usa `tl-organizer traza` para reconocer en qué carpeta busca el motor archivos sueltos que tapan a esos."""
+        return set()
+
     def releer(self, juego, salida):
         """Como textos(), pero viendo el juego con la salida de construir() encima: lo que mostraría el juego con el parche.
         Opcional; lo usa la prueba de contrato (motores/contrato.py) para verificar la ida y vuelta."""

@@ -9,7 +9,7 @@ import sys
 
 from ...nucleo import config, perfiles, proyecto as project
 from ...nucleo.config import lista, need
-from . import exe_patch
+from . import exe_patch, sueltos
 
 
 def _motor():
@@ -88,12 +88,13 @@ def cmd_images_import(a):
     juego = need(a.juego, "juego", "la carpeta del juego")
     salida = need(a.salida, "juego_es", "la carpeta de salida")
     placed, warns, errs = import_.import_images(need(a.origen, "imagenes", "la carpeta de imágenes traducidas"),
-                                                _arc_paths(juego, a.arc or _motor().ui_arcs), salida)
+                                                _arc_paths(juego, a.arc or _motor().ui_arcs), salida,
+                                                sueltos=_motor().sueltos)
     for n, w in warns:
         print("aviso:", n, "-", w)
     for n, e in errs:
         print("ERROR:", n, "-", e)
-    print(f"{len(placed)} colocadas en {os.path.join(salida, import_.LOOSE_DIR)}; {len(errs)} con error")
+    print(f"{len(placed)} colocadas en {sueltos.carpeta(salida, 'Graphic', _motor().sueltos)}; {len(errs)} con error")
     return 1 if errs else 0
 
 
@@ -123,7 +124,7 @@ def cmd_text_import(a):
         filas = proj.almacen.filas_por_escenario()
     m = _motor()
     r = import_.apply_rows(need(a.juego, "juego", "la carpeta del juego"), filas, need(a.salida, "juego_es", "la carpeta de salida"),
-                           lista(a.estados), m.utf8 and not a.katakana, m.data_arcs)
+                           lista(a.estados), m.utf8 and not a.katakana, m.data_arcs, m.sueltos)
     for k, v in r["errores"][:30]:
         print("ERROR:", k, "-", v)
     if len(r["errores"]) > 30:
@@ -162,7 +163,7 @@ def registrar(sub, grupos):
     p.add_argument("--sin-xlsx", action="store_true"); p.set_defaults(f=cmd_text_export)
 
     p = tx.add_parser("import", help="(BGI) arma los escenarios del juego con el español de las hojas")
-    p.add_argument("juego", nargs="?"); p.add_argument("salida", nargs="?", help="carpeta donde escribe Script/CVTD/")
+    p.add_argument("juego", nargs="?"); p.add_argument("salida", nargs="?", help="carpeta donde escribe los escenarios (Script/CVTD/, o la raíz si el perfil dice sueltos = \"raiz\")")
     p.add_argument("hojas", nargs="*", help=".xlsx / .tsv o carpetas con ellos (por defecto, la traducción del proyecto)")
     p.add_argument("--estados", default="traducido,del parche",
                    help="estados que se aplican (por defecto: traducido,del parche; agregar 'revisar' para probar todo)")

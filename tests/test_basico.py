@@ -843,6 +843,25 @@ def test_contrato_motor_bgi(tmp_path, utf8):
                               opciones={"utf8": utf8}) == []
 
 
+def test_sueltos_en_la_raiz(tmp_path):
+    """[bgi] sueltos = "raiz" (DESIRE remaster): los escenarios van a la carpeta del juego, no a Script/CVTD."""
+    from tl_organizer.motores import contrato
+    from tl_organizer.motores.base import MotorError
+    from tl_organizer.motores.bgi import MotorBGI
+    from tl_organizer.nucleo import perfiles
+    juego = tmp_path / "juego"
+    juego.mkdir()
+    (juego / "data01.arc").write_bytes(_arc([("esc1", _escenario_con_textos(["一つ目", "二つ目"]))]))
+    m = MotorBGI(perfiles.Perfil({"id": "x", "nombre": "x", "motor": "bgi", "bgi": {"sueltos": "raiz", "modo": "katakana"}}))
+    assert m.sueltos == "raiz"
+    assert contrato.verificar(m, str(juego), str(tmp_path / "t"), traduccion=lambda f: "¡Hola!") == []
+    filas = {"esc1": [dict(f, traduccion="¡Hola!", estado="traducido") for f in next(m.textos(str(juego)))[2]]}
+    m.construir(str(juego), str(tmp_path / "salida"), filas, log=lambda *a: None)
+    assert (tmp_path / "salida" / "esc1").exists() and not (tmp_path / "salida" / "Script").exists()
+    with pytest.raises(MotorError):
+        MotorBGI(perfiles.Perfil({"id": "x", "nombre": "x", "motor": "bgi", "bgi": {"sueltos": "Script"}}))
+
+
 class MotorJuguete(__import__("tl_organizer.motores.kit", fromlist=["MotorTextoPlano"]).MotorTextoPlano):
     """Un formato de texto inventado: 【nombre】「diálogo」, narración suelta, @opcion texto, ; comentario."""
     nombre = "juguete"
@@ -1067,11 +1086,28 @@ def test_proporcional_en_programas_de_sistema():
                         + bytes.fromhex("0001" "0c") + bytes([0, 1]) * 8 + b"\x92\x9c")              # algo raro: no se toca
     datos = _programa(pref + bytes.fromhex("0000" "0900"))           # inicializa la preferencia con 0
     nuevos, rep = sysprg.parchear_proporcional({"a._bp": dibujar, "b._bp": formato, "userdata._bp": datos, "c._bp": _programa(b"\x00\x05")})
-    assert sorted(nuevos) == ["a._bp", "b._bp", "userdata._bp"] and len(rep["cambios"]) == 3
+    assert sorted(nuevos) == ["a._bp", "b._bp", "userdata._bp"] and len(rep["cambios"]) == 4
     assert nuevos["a._bp"][16 + 3] == 1 and nuevos["a._bp"][16 + 5] == 9 and nuevos["userdata._bp"][16 + 9] == 1
+    # la lectura de la preferencia (10 bytes) pasa a ser una constante 1 del mismo largo; lo que sigue no se mueve
+    leer = nuevos["a._bp"][16 + 8:16 + 18]
+    assert leer == sysprg.constante(10) and nuevos["a._bp"][16 + 18:] == bytes.fromhex("0000" "9188")
+    ins = sysprg.instrucciones(nuevos["a._bp"])
+    assert sysprg.argumentos(ins, len(ins) - 1, 2) is not None
     assert nuevos["b._bp"][16 + 1] == 1 and nuevos["b._bp"][16 + 3] == 5
     assert len(rep["omitidas"]) == 1 and rep["omitidas"][0][0] == "b._bp"
     assert sysprg.parchear_proporcional({**{"a._bp": dibujar, "b._bp": formato, "userdata._bp": datos}, **nuevos})[1]["cambios"] == []
+
+
+def test_constante_de_largo_fijo():
+    from tl_organizer.motores.bgi import sysprg
+    assert sysprg.constante(4) is None and sysprg.constante(1) is None       # no hay forma con push8/16/32 y add
+    for largo in [2, 3] + list(range(5, 40)):
+        c = sysprg.constante(largo)
+        assert c is not None and len(c) == largo, largo
+        ins = sysprg.instrucciones(struct.pack("<II", 16, len(c)) + b"\0" * 8 + c)
+        # efecto en la pila: +1 (un push más que adds) y el único push distinto de cero es el primero
+        assert sum(1 if op in sysprg.EMPUJA else -1 for _p, op, _a in ins) == 1
+        assert int.from_bytes(ins[0][2], "little") == 1 and all(not any(a) for _p, op, a in ins[1:] if op in sysprg.EMPUJA)
 
 
 def test_exe_parches_genericos_y_capacidades():
@@ -1102,3 +1138,41 @@ def test_perfil_desire():
     assert m.utf8 is False and m.opciones["proporcional"] == "programas" and m.data_arcs == ("data010*.arc",)
     assert not m.caracteres_invalidos("¡Ñandú!") and m.caracteres_invalidos("5 €") == ["€"]      # katakana: el € no entra
     assert m._utf8({"utf8": True}) is True and b["parches"][0][0] == 0x6eea5
+
+
+def test_traza_wine_procmon_y_analisis(tmp_path):
+    """tl-organizer traza: lectura de la traza de Wine y del CSV de Process Monitor, y el análisis de dónde busca sueltos."""
+    from tl_organizer.nucleo import traza
+    pref = tmp_path / "pfx"
+    (pref / "dosdevices").mkdir(parents=True)
+    (pref / "dosdevices" / "z:").symlink_to("/")
+    juego = tmp_path / "juego"
+    (juego / "UserData").mkdir(parents=True)
+    (juego / "a01").write_bytes(b"x")
+    w = "Z:" + str(juego).replace("/", "\\\\\\\\")           # como lo escribe Wine en la traza: barras dobles
+    lineas = [
+        f'0024:trace:file:NtCreateFile handle=0x1 access=80100080 name=L"\\\\??\\\\{w}\\\\a01" objattr=40 root=(nil) sec=(nil) io=0x2 alloc_size=(nil) attr=00000020 sharing=00000001 disp=1 options=00000064 ea=(nil).0x0\n',
+        f'0024:trace:file:NtCreateFile handle=0x1 access=80100080 name=L"\\\\??\\\\{w}\\\\a02" objattr=40 root=(nil) sec=(nil) io=0x2 alloc_size=(nil) attr=00000020 sharing=00000001 disp=1 options=00000064 ea=(nil).0x0\n',
+        f'0024:warn:file:NtCreateFile L"\\\\??\\\\{w}\\\\a02" not found (c0000034)\n',
+        f'0024:trace:file:NtCreateFile handle=0x1 access=c0100080 name=L"\\\\??\\\\{w}\\\\UserData\\\\s.sud" objattr=40 root=(nil) sec=(nil) io=0x2 alloc_size=(nil) attr=00000020 sharing=00000001 disp=5 options=00000064 ea=(nil).0x0\n',
+    ]
+    acc = traza.leer_traza_wine(lineas, traza.RutasWine(str(pref)))
+    assert [(a.ruta.rsplit("/", 1)[1], a.encontrado, a.escritura) for a in acc] == \
+        [("a01", True, False), ("a02", False, False), ("s.sud", True, True)]
+    acc.append(traza.Acceso(str(juego / "hid.dll"), "abrir", False))
+    salida = tmp_path / "salida"
+    (salida / "Script" / "CVTD").mkdir(parents=True)
+    (salida / "Script" / "CVTD" / "a02").write_bytes(b"y")
+    rep = traza.analizar(acc, str(juego), entradas={"a01", "a02"}, salida=str(salida))
+    assert rep["carpetas_de_sueltos"] == {".": 2} and rep["escritos"] == {"UserData/s.sud": 1}
+    assert rep["no_encontrados"] == {".": {"a02": 1}}                     # la DLL que busca Wine no cuenta
+    assert rep["parche"]["Script/CVTD/a02"].startswith("lo buscó en otra carpeta: .")
+    csv_ = tmp_path / "pm.csv"
+    csv_.write_text('"Time of Day","Process Name","PID","Operation","Path","Result","Detail"\n'
+                    f'"1","JUEGO.exe","1","CreateFile","{juego}/a01","SUCCESS","Desired Access: Generic Read, Disposition: Open"\n'
+                    f'"1","JUEGO.exe","1","CreateFile","{juego}/a02","NAME NOT FOUND","Desired Access: Generic Read"\n'
+                    f'"1","otro.exe","2","CreateFile","{juego}/a01","SUCCESS","Desired Access: Generic Read"\n'
+                    f'"1","JUEGO.exe","1","WriteFile","{juego}/UserData/s.sud","SUCCESS","Offset: 0"\n', encoding="utf-8")
+    acc = traza.leer_csv_procmon(str(csv_), "juego.exe")
+    assert [(a.ruta.rsplit("/", 1)[1], a.encontrado, a.escritura) for a in acc] == \
+        [("a01", True, False), ("a02", False, False), ("s.sud", True, True)]

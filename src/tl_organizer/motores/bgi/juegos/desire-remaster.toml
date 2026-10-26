@@ -40,6 +40,9 @@ modo = "katakana"
 fuente = "SubaHibi07Inq"
 # Sin desvío de exe para el modo proporcional: se activa en los programas de sistema (ver motores/bgi/sysprg.py).
 proporcional = "programas"
+# Este exe busca los archivos sueltos (escenarios, programas de sistema, imágenes) en la carpeta del juego, no en
+# Script\CVTD ni Graphic\CVTD: una traza de Wine muestra que abre «a01» y «userdata._bp» ahí y nunca mira CVTD.
+sueltos = "raiz"
 
 [[bgi.ejecutables]]
 sha256 = "3c9ef4e0296e019daad247ae9689eec53676626d74864fac56d2133ebc5d508f"

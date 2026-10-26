@@ -2,18 +2,19 @@
 """Arma la carpeta del juego traducido a partir de tu copia del juego, el parche viejo y tus traducciones."""
 import os
 from .arc import Arc
-from . import exe_patch, oldpatch
+from . import exe_patch, oldpatch, sueltos as sueltos_mod
 from .text import export, import_
 from .images import import_ as images_import
 
 
 def build(game, out, old=None, filas=None, imagenes=None, estados=import_.APLICAR, voces=True, utf8=True, font_name=None,
           exe=None, exe_name="BGI.exe", builds=None, data_arcs=export.DATA_ARCS, ui_arcs=("sysgrp.arc",),
-          proporcional="exe", sys_arcs=("sysprg.arc",), log=print):
+          proporcional="exe", sys_arcs=("sysprg.arc",), sueltos="carpetas", log=print):
     """filas: {escenario: [filas]} de las hojas, o None si no hay hojas.  exe: ruta del ejecutable original;
     builds: versiones conocidas del exe ({sha256: datos}, ver exe_patch.desde_perfil).  data_arcs: patrones de los .arc
     con escenarios; ui_arcs: los .arc con las imágenes de interfaz.  proporcional: "exe" (desvío en el exe), "programas"
-    (se parchean los programas de sistema de sys_arcs, ver sysprg.py) o "no"."""
+    (se parchean los programas de sistema de sys_arcs, ver sysprg.py) o "no".  sueltos: dónde busca el motor los
+    archivos sueltos ("carpetas" = <Tipo>/CVTD, "raiz" = la carpeta del juego; ver sueltos.py)."""
     rep = {}
     os.makedirs(out, exist_ok=True)
     game, out = os.path.abspath(game), os.path.abspath(out)
@@ -42,7 +43,7 @@ def build(game, out, old=None, filas=None, imagenes=None, estados=import_.APLICA
                     raw = arc.read(n)
                     programas[n] = dsc.decode(raw) if dsc.is_dsc(raw) else raw
         nuevos, r = sysprg.parchear_proporcional(programas)
-        dest = os.path.join(out, "Script", "CVTD")
+        dest = sueltos_mod.carpeta(out, "Script", sueltos)
         os.makedirs(dest, exist_ok=True)
         for n, datos in nuevos.items():
             with open(os.path.join(dest, n), "wb") as f:
@@ -64,27 +65,27 @@ def build(game, out, old=None, filas=None, imagenes=None, estados=import_.APLICA
                 return True
             return name in ui_old                # interfaz vieja
 
-        r = oldpatch.OldPatch(old).copy_loose(out, skip)
+        r = oldpatch.OldPatch(old).copy_loose(out, skip, sueltos)
         rep["sueltos"] = r["copiados"]
         rep["omitidos_ui_vieja"] = sum(1 for k, nm in r["omitidos"] if nm in ui_old)
         log(f"{rep['sueltos']} archivos sueltos del parche viejo ({rep['omitidos_ui_vieja']} imágenes de la interfaz vieja omitidas)")
     # 3) escenarios
     if filas is not None:
-        t = import_.apply_rows(game, filas, out, estados, utf8, data_arcs)
+        t = import_.apply_rows(game, filas, out, estados, utf8, data_arcs, sueltos)
     elif old:
         olds = export.load_old(old)
         data_rows = {}
         for _arc, name, jp in export.scenarios(game, patrones=data_arcs):
             if name in olds:
                 data_rows[name] = export.script_rows(name, jp, olds[name])
-        t = import_.apply_rows(game, data_rows, out, estados, utf8, data_arcs)
+        t = import_.apply_rows(game, data_rows, out, estados, utf8, data_arcs, sueltos)
     elif utf8:
-        t = import_.apply_rows(game, {}, out, estados, utf8, data_arcs)
+        t = import_.apply_rows(game, {}, out, estados, utf8, data_arcs, sueltos)
     else:
         t = None
     rep["texto"] = t
     # 4) imágenes traducidas
     if imagenes:
-        placed, warns, errs = images_import.import_images(imagenes, ui_paths, out)
+        placed, warns, errs = images_import.import_images(imagenes, ui_paths, out, sueltos=sueltos)
         rep["imagenes"] = dict(colocadas=len(placed), avisos=warns, errores=errs)
     return rep

@@ -196,6 +196,12 @@ tl-organizer desinstalar      # deja el juego exactamente como estaba
 Con `instalar` el juego queda **en español** (el `BGI.exe` y los archivos sueltos pasan a ser los del parche). `desinstalar` borra lo agregado y restaura lo que se pisó;
 sigue funcionando con el parche instalado, porque el `BGI.exe` original se toma del respaldo. En Wine: `env WINEPREFIX=… wine BGI.exe` desde la carpeta del juego.
 
+*¿El juego no muestra los cambios?* `tl-organizer traza` abre el juego anotando qué archivos lee, busca y escribe, y dice
+para cada archivo de `salida/` si el juego lo leyó, si lo buscó en otra carpeta o si no lo pidió. También muestra en qué carpeta busca el
+motor los archivos sueltos. En Linux y macOS usa Wine (el Wine, el prefijo y el entorno de Lutris si el juego está ahí; si no, `--wine`,
+`--prefijo`, `--env LANG=ja_JP.UTF-8`); en Windows, Process Monitor de Sysinternals (`--procmon RUTA\Procmon.exe`, como administrador).
+Con `--segundos N` el juego se cierra solo; si no, espera a que lo cierres. La traza y el informe quedan en `tl-organizer-trabajo/trazas/`.
+
 *Sin tocar la instalación:* `tl-organizer build --jugable` arma `tl-organizer-trabajo/jugable/`, una carpeta de prueba completa con enlaces a los archivos del juego, para ejecutarla aparte.
 
 ## 8. Entregar el parche a otras personas
@@ -232,6 +238,9 @@ tl-organizer reset --todo     # borra también tl-organizer-trabajo/ (pide confi
 - **«esta carpeta no parece la instalación…» al hacer `init`:** el mensaje dice qué falta (`BGI.exe` de otra versión, algún `.arc`). Tiene que ser la 15th Anniversary 1.685.3 **sin parches**.
 - **«no encuentro un BGI.exe original»:** el `BGI.exe` del juego ya fue reemplazado y no hay respaldo; restaurá el original (reinstalá el juego o verificá archivos) o ejecutá `desinstalar`.
 - **El juego se ve en japonés:** no se instaló el parche (`instalar`), o se copió sin el `BGI.exe` de `salida/`.
+- **Se ve el texto original aunque `instalar` copió todo:** el juego busca los archivos sueltos en otra carpeta. Corré `tl-organizer traza`
+  y mirá «Dónde busca archivos sueltos»; en un perfil BGI se ajusta con `sueltos = "raiz"` o `"carpetas"` en la sección `[bgi]`.
+- **Acentos como signos japoneses (katakana) en DESIRE:** falta la fuente `SubaHibi07Inq` en `drive_c/windows/Fonts/` del prefijo de ese juego.
 - **Salen signos raros en vez de letras:** falta instalar la fuente (`SubaHibi07Inq`) o se mezclaron archivos de otro parche. El juego corre en UTF-8: **todos** los escenarios y el exe tienen que ser los de `salida/`.
 - **Perdí un cambio en una hoja:** `exportar` nunca pisa la traducción; si usaste `--forzar`, la versión anterior está en `backup/texto-<fecha>/`. Si apareció un CONFLICTO,
   tu versión sigue en la hoja (no se regenera hasta que lo resuelvas).
@@ -332,8 +341,9 @@ La herramienta se está generalizando para cualquier novela visual (plan complet
 
   En DESIRE la fuente tiene que ser una que dibuje los katakana de ancho medio como letras con tilde (la `SubaHibi07Inq` del parche
   viejo de Subarashiki Hibi; se puede cambiar con `build --fuente` o en el perfil). El modo proporcional se activa como en el parche de
-  Sakura no Uta de Taikutsu Translation: `build` deja en `Script/CVTD` los programas de sistema (`._bp`) con el argumento «proporcional»
-  de las llamadas de texto en 1 (ver `motores/bgi/sysprg.py`). En los dos juegos cada mensaje con nombre de personaje da dos filas:
+  Sakura no Uta de Taikutsu Translation: `build` deja sueltos los programas de sistema (`._bp`) con el argumento «proporcional»
+  de las llamadas de texto en 1 (ver `motores/bgi/sysprg.py`). Este exe busca los archivos sueltos en la carpeta del juego y no en
+  `Script/CVTD` (perfil: `sueltos = "raiz"`; lo mostró `tl-organizer traza`). En los dos juegos cada mensaje con nombre de personaje da dos filas:
   el nombre y el texto.
 - **El kit para escribir motores** (`motores/kit/`): clases base para scripts de texto (`MotorTextoPlano`: unas expresiones regulares y listo),
   para envolver una herramienta de línea de comandos (`MotorExterno`) y piezas para formatos binarios (tabla de cadenas, contenedores,
