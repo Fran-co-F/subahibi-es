@@ -1142,24 +1142,28 @@ def test_perfil_desire():
 
 def test_traza_wine_procmon_y_analisis(tmp_path):
     """tl-organizer traza: lectura de la traza de Wine y del CSV de Process Monitor, y el análisis de dónde busca sueltos."""
+    import sys
     from tl_organizer.nucleo import traza
-    pref = tmp_path / "pfx"
-    (pref / "dosdevices").mkdir(parents=True)
-    (pref / "dosdevices" / "z:").symlink_to("/")
     juego = tmp_path / "juego"
     (juego / "UserData").mkdir(parents=True)
     (juego / "a01").write_bytes(b"x")
-    w = "Z:" + str(juego).replace("/", "\\\\\\\\")           # como lo escribe Wine en la traza: barras dobles
-    lineas = [
-        f'0024:trace:file:NtCreateFile handle=0x1 access=80100080 name=L"\\\\??\\\\{w}\\\\a01" objattr=40 root=(nil) sec=(nil) io=0x2 alloc_size=(nil) attr=00000020 sharing=00000001 disp=1 options=00000064 ea=(nil).0x0\n',
-        f'0024:trace:file:NtCreateFile handle=0x1 access=80100080 name=L"\\\\??\\\\{w}\\\\a02" objattr=40 root=(nil) sec=(nil) io=0x2 alloc_size=(nil) attr=00000020 sharing=00000001 disp=1 options=00000064 ea=(nil).0x0\n',
-        f'0024:warn:file:NtCreateFile L"\\\\??\\\\{w}\\\\a02" not found (c0000034)\n',
-        f'0024:trace:file:NtCreateFile handle=0x1 access=c0100080 name=L"\\\\??\\\\{w}\\\\UserData\\\\s.sud" objattr=40 root=(nil) sec=(nil) io=0x2 alloc_size=(nil) attr=00000020 sharing=00000001 disp=5 options=00000064 ea=(nil).0x0\n',
-    ]
-    acc = traza.leer_traza_wine(lineas, traza.RutasWine(str(pref)))
-    assert [(a.ruta.rsplit("/", 1)[1], a.encontrado, a.escritura) for a in acc] == \
-        [("a01", True, False), ("a02", False, False), ("s.sud", True, True)]
-    acc.append(traza.Acceso(str(juego / "hid.dll"), "abrir", False))
+    if sys.platform != "win32":                                    # Wine: solo en Linux/macOS (z: -> / en dosdevices)
+        pref = tmp_path / "pfx"
+        (pref / "dosdevices").mkdir(parents=True)
+        (pref / "dosdevices" / "z:").symlink_to("/")
+        w = "Z:" + str(juego).replace("/", "\\\\")           # como lo escribe Wine en la traza: barras dobles
+        lineas = [
+            f'0024:trace:file:NtCreateFile handle=0x1 access=80100080 name=L"\\??\\{w}\\a01" objattr=40 root=(nil) sec=(nil) io=0x2 alloc_size=(nil) attr=00000020 sharing=00000001 disp=1 options=00000064 ea=(nil).0x0\n',
+            f'0024:trace:file:NtCreateFile handle=0x1 access=80100080 name=L"\\??\\{w}\\a02" objattr=40 root=(nil) sec=(nil) io=0x2 alloc_size=(nil) attr=00000020 sharing=00000001 disp=1 options=00000064 ea=(nil).0x0\n',
+            f'0024:warn:file:NtCreateFile L"\\??\\{w}\\a02" not found (c0000034)\n',
+            f'0024:trace:file:NtCreateFile handle=0x1 access=c0100080 name=L"\\??\\{w}\\UserData\\s.sud" objattr=40 root=(nil) sec=(nil) io=0x2 alloc_size=(nil) attr=00000020 sharing=00000001 disp=5 options=00000064 ea=(nil).0x0\n',
+        ]
+        acc = traza.leer_traza_wine(lineas, traza.RutasWine(str(pref)))
+        assert [(a.ruta.rsplit("/", 1)[1], a.encontrado, a.escritura) for a in acc] == \
+            [("a01", True, False), ("a02", False, False), ("s.sud", True, True)]
+    acc = [traza.Acceso(str(juego / "a01"), "abrir", True), traza.Acceso(str(juego / "a02"), "abrir", False),
+           traza.Acceso(str(juego / "UserData" / "s.sud"), "abrir", True, True),
+           traza.Acceso(str(juego / "hid.dll"), "abrir", False)]
     salida = tmp_path / "salida"
     (salida / "Script" / "CVTD").mkdir(parents=True)
     (salida / "Script" / "CVTD" / "a02").write_bytes(b"y")
@@ -1168,11 +1172,12 @@ def test_traza_wine_procmon_y_analisis(tmp_path):
     assert rep["no_encontrados"] == {".": {"a02": 1}}                     # la DLL que busca Wine no cuenta
     assert rep["parche"]["Script/CVTD/a02"].startswith("lo buscó en otra carpeta: .")
     csv_ = tmp_path / "pm.csv"
+    a01, a02, sud = juego / "a01", juego / "a02", juego / "UserData" / "s.sud"      # rutas nativas, como las de Procmon
     csv_.write_text('"Time of Day","Process Name","PID","Operation","Path","Result","Detail"\n'
-                    f'"1","JUEGO.exe","1","CreateFile","{juego}/a01","SUCCESS","Desired Access: Generic Read, Disposition: Open"\n'
-                    f'"1","JUEGO.exe","1","CreateFile","{juego}/a02","NAME NOT FOUND","Desired Access: Generic Read"\n'
-                    f'"1","otro.exe","2","CreateFile","{juego}/a01","SUCCESS","Desired Access: Generic Read"\n'
-                    f'"1","JUEGO.exe","1","WriteFile","{juego}/UserData/s.sud","SUCCESS","Offset: 0"\n', encoding="utf-8")
+                    f'"1","JUEGO.exe","1","CreateFile","{a01}","SUCCESS","Desired Access: Generic Read, Disposition: Open"\n'
+                    f'"1","JUEGO.exe","1","CreateFile","{a02}","NAME NOT FOUND","Desired Access: Generic Read"\n'
+                    f'"1","otro.exe","2","CreateFile","{a01}","SUCCESS","Desired Access: Generic Read"\n'
+                    f'"1","JUEGO.exe","1","WriteFile","{sud}","SUCCESS","Offset: 0"\n', encoding="utf-8")
     acc = traza.leer_csv_procmon(str(csv_), "juego.exe")
-    assert [(a.ruta.rsplit("/", 1)[1], a.encontrado, a.escritura) for a in acc] == \
+    assert [(os.path.basename(a.ruta), a.encontrado, a.escritura) for a in acc] == \
         [("a01", True, False), ("a02", False, False), ("s.sud", True, True)]

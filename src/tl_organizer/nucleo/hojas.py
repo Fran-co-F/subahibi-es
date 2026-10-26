@@ -115,18 +115,21 @@ def read_xlsx(path):
     from openpyxl import load_workbook
     wb = load_workbook(path, read_only=True, data_only=True)
     out = {}
-    for ws in wb.worksheets:
-        it = ws.iter_rows(values_only=True)
-        head = [str(x) if x is not None else "" for x in next(it, [])]
-        _check_head(head, f"{path}[{ws.title}]")
-        cols = COLUMNS + (["base"] if len(head) > len(COLUMNS) and head[len(COLUMNS)] == "base" else [])
-        rows = []
-        for vals in it:
-            if vals is None or all(v is None for v in vals):
-                continue
-            vals = list(vals) + [None] * (len(cols) - len(vals))
-            rows.append({c: ("" if v is None else str(v)) for c, v in zip(cols, vals)})
-        out[ws.title] = rows
+    try:
+        for ws in wb.worksheets:
+            it = ws.iter_rows(values_only=True)
+            head = [str(x) if x is not None else "" for x in next(it, [])]
+            _check_head(head, f"{path}[{ws.title}]")
+            cols = COLUMNS + (["base"] if len(head) > len(COLUMNS) and head[len(COLUMNS)] == "base" else [])
+            rows = []
+            for vals in it:
+                if vals is None or all(v is None for v in vals):
+                    continue
+                vals = list(vals) + [None] * (len(cols) - len(vals))
+                rows.append({c: ("" if v is None else str(v)) for c, v in zip(cols, vals)})
+            out[ws.title] = rows
+    finally:
+        wb.close()            # en modo read_only el archivo queda abierto hasta cerrarlo (Windows no deja moverlo ni borrarlo)
     return out
 
 
