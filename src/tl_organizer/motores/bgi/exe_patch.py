@@ -31,16 +31,33 @@ def sha256(data):
 
 
 def desde_perfil(d):
-    """Un bloque [[bgi.ejecutables]] del perfil -> diccionario de versión (con 'font' como [(desplazamiento, bytes)])."""
+    """Un bloque [[bgi.ejecutables]] del perfil -> diccionario de versión.
+    'font': [(desplazamiento, bytes originales, tamaño del lugar)]; 'parches': [(desplazamiento, original, nuevo, para)]
+    (cambios de bytes verificados; para = "fuente" se aplican junto con el cambio de fuente)."""
     for k in ("sha256", "version"):
         if not isinstance(d.get(k), str):
             raise PatchError(f"[[bgi.ejecutables]]: falta «{k}»")
     b = dict(d)
     try:
-        b["font"] = [(f["offset"], bytes.fromhex(f["original"])) for f in d.get("font", [])]
+        b["font"] = [(f["offset"], bytes.fromhex(f["original"]), int(f.get("tamano", 16))) for f in d.get("font", [])]
+        b["parches"] = [(p["offset"], bytes.fromhex(p["original"]), bytes.fromhex(p["nuevo"]), p.get("para", "fuente"))
+                        for p in d.get("parches", [])]
     except (KeyError, TypeError, ValueError) as e:
-        raise PatchError(f"[[bgi.ejecutables]] {d['version']}: «font» mal escrito ({e})")
+        raise PatchError(f"[[bgi.ejecutables]] {d['version']}: «font» o «parches» mal escrito ({e})")
+    for o, orig, nuevo, _para in b["parches"]:
+        if len(orig) != len(nuevo):
+            raise PatchError(f"[[bgi.ejecutables]] {d['version']}: el parche en 0x{o:x} cambia el largo")
     return b
+
+
+def tiene_proporcional(b):
+    """La versión trae el desvío de exe para el modo proporcional (si no, se hace en los programas de sistema)."""
+    return "hook" in b
+
+
+def tiene_utf8(b):
+    """La versión trae Text_SetEncoding (modo UTF-8; existe desde la 1.653)."""
+    return "utf8_cave" in b
 
 
 def identify(data, builds):
@@ -49,18 +66,18 @@ def identify(data, builds):
     return h, builds.get(h)
 
 
-def font_slot(name):
-    """Nombre de fuente como los 16 bytes que ocupan en el exe (ASCII, hasta 15 caracteres)."""
+def font_slot(name, tamano=16):
+    """Nombre de fuente como los bytes que ocupa en el exe (ASCII, hasta tamano-1 caracteres)."""
     raw = name.encode("ascii", "strict") if name.isascii() else b""
-    if not raw or len(raw) > 15:
-        raise PatchError(f"el nombre de la fuente debe ser ASCII y tener 1 a 15 caracteres: {name!r}")
-    return raw.ljust(16, b"\x00")
+    if not raw or len(raw) > tamano - 1:
+        raise PatchError(f"el nombre de la fuente debe ser ASCII y tener 1 a {tamano - 1} caracteres: {name!r}")
+    return raw.ljust(tamano, b"\x00")
 
 
 def is_patched(data, builds):
     """True si el exe ya lleva un cambio de fuente (la original es 'MS Gothic')."""
     for b in builds.values():
-        if all(data[o:o + 16] != old.ljust(16, b"\x00") for o, old in b["font"]):
+        if b["font"] and all(data[o:o + t] != old.ljust(t, b"\x00") for o, old, t in b["font"]):
             return True
     return False
 
@@ -75,14 +92,29 @@ def patch(data, builds, font=True, proportional=True, utf8=False, font_name=None
             + ("; ".join(v["version"] for v in builds.values()) or "ninguna versión (no hay perfiles con [[bgi.ejecutables]])"))
     if font and not font_name:
         raise PatchError("falta el nombre de la fuente (opción --fuente o «fuente» en la sección [bgi] del perfil)")
+    if proportional and not tiene_proporcional(b):
+        raise PatchError(f"{b['version']}: esta versión no tiene desvío de exe para el modo proporcional "
+                         "(se hace en los programas de sistema: proporcional = \"programas\" en el perfil)")
+    if utf8 and not tiene_utf8(b):
+        raise PatchError(f"{b['version']}: esta versión del motor no tiene modo UTF-8 (Text_SetEncoding existe desde la 1.653); "
+                         "usá el modo katakana (--katakana, o modo = \"katakana\" en la sección [bgi] del perfil)")
     d = bytearray(data)
     off = lambda va: va - b["text_va"] + b["text_raw"]
+
+    def cambiar(o, orig, nuevo):
+        if d[o:o + len(orig)] != orig:
+            raise PatchError(f"contenido inesperado en 0x{o:x} (esperaba {orig.hex()}, hay {bytes(d[o:o + len(orig)]).hex()})")
+        d[o:o + len(nuevo)] = nuevo
     if font:
-        slot = font_slot(font_name)
-        for o, old in b["font"]:
-            if d[o:o + len(old)] != old:
-                raise PatchError(f"contenido inesperado en 0x{o:x}")
-            d[o:o + 16] = slot
+        for o, old, t in b["font"]:
+            cambiar(o, old, old)                       # verifica el original
+            d[o:o + t] = font_slot(font_name, t)
+        for o, orig, nuevo, para in b["parches"]:
+            if para == "fuente":
+                cambiar(o, orig, nuevo)
+    for o, orig, nuevo, para in b["parches"]:
+        if para == "siempre":
+            cambiar(o, orig, nuevo)
     if proportional:
         hook, cave, back = b["hook"], b["cave"], b["back"]
         if d[off(hook):off(hook) + 7].hex() != b["hook_bytes"]:

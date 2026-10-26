@@ -323,6 +323,18 @@ La herramienta se está generalizando para cualquier novela visual (plan complet
   (por ejemplo [`motores/bgi/juegos/subahibi-15th.toml`](src/tl_organizer/motores/bgi/juegos/subahibi-15th.toml)). `init` prueba todos los perfiles y usa el que coincide.
   Se buscan en las carpetas de `TL_ORGANIZER_PERFILES`, en `~/.config/tl-organizer/juegos/` (Windows: `%APPDATA%\tl-organizer\juegos\`) y en los incluidos en cada motor;
   un perfil propio con el mismo `id` reemplaza al incluido. Así, otra versión del exe o otro juego BGI se soporta escribiendo un TOML, sin tocar código.
+- **Juegos con perfil incluido:**
+
+  | Juego | Motor | Texto | Fuente | Modo proporcional |
+  |---|---|---|---|---|
+  | Subarashiki Hibi 15th Anniversary | BGI 1.685.3 (exe de 64 bits) | UTF-8 | la del perfil, en el exe | desvío en el exe |
+  | DESIRE remaster | BGI 1.642.1 (exe de 32 bits) | Shift-JIS con acentos en katakana (modo `katakana`: esta versión no tiene UTF-8) | `SubaHibi07Inq`, en el exe | en los programas de sistema |
+
+  En DESIRE la fuente tiene que ser una que dibuje los katakana de ancho medio como letras con tilde (la `SubaHibi07Inq` del parche
+  viejo de Subarashiki Hibi; se puede cambiar con `build --fuente` o en el perfil). El modo proporcional se activa como en el parche de
+  Sakura no Uta de Taikutsu Translation: `build` deja en `Script/CVTD` los programas de sistema (`._bp`) con el argumento «proporcional»
+  de las llamadas de texto en 1 (ver `motores/bgi/sysprg.py`). En los dos juegos cada mensaje con nombre de personaje da dos filas:
+  el nombre y el texto.
 - **El kit para escribir motores** (`motores/kit/`): clases base para scripts de texto (`MotorTextoPlano`: unas expresiones regulares y listo),
   para envolver una herramienta de línea de comandos (`MotorExterno`) y piezas para formatos binarios (tabla de cadenas, contenedores,
   codificaciones), más una **prueba de contrato** que se le corre a cualquier motor. Guía paso a paso: [`docs/MOTORES.md`](docs/MOTORES.md).

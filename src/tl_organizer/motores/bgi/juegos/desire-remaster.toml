@@ -1,0 +1,55 @@
+# Perfil de juego: DESIRE remaster (Ethornell / BGI v1.642.1, exe de 32 bits).
+# Formato de los perfiles: src/tl_organizer/nucleo/perfiles.py y docs/PLAN.md (sección 1.4).
+id = "desire-remaster"
+nombre = "DESIRE remaster"
+motor = "bgi"
+
+[deteccion]
+requeridos = ["DESIRE_A.exe", "sysgrp.arc", "sysprg.arc", "system.arc", "data01001.arc"]
+ejecutable = "DESIRE_A.exe"     # init guarda una copia del original
+
+[texto]
+archivos = ["data010*.arc"]     # escenarios (data02… a data05… son imágenes, voces y música)
+idioma = "ja"
+
+[imagenes]
+archivos = ["sysgrp.arc"]
+
+[galeria.pantallas]
+SGTitle = "Pantalla de título"
+SGMenu = "Menú dentro del juego"
+SGDialog = "Diálogos"
+SGCnfgWnd = "Configuración"
+SGKeyCnfg = "Configuración de teclas"
+SGUsDtWnd = "Guardar / Cargar"
+SGScene = "Galería de escenas"
+SGMusic = "Galería de música"
+SGMsgWnd = "Ventana de mensajes"
+SGLogWnd = "Historial"
+SGCG = "Galería de CG"
+
+[jugable]
+enlazar_extensiones = [".arc", ".ico"]
+enlazar = ["BHVC.exe", "BGI.hvl"]
+copiar_una_vez = ["BGI.gdb", "UserData", "bsadt"]
+
+[bgi]
+# Esta versión no tiene modo UTF-8 (Text_SetEncoding llegó en la 1.653): el texto va en Shift-JIS con los acentos como
+# katakana de ancho medio, que la fuente SubaHibi07Inq (la del parche viejo de Subarashiki Hibi) dibuja como letras.
+modo = "katakana"
+fuente = "SubaHibi07Inq"
+# Sin desvío de exe para el modo proporcional: se activa en los programas de sistema (ver motores/bgi/sysprg.py).
+proporcional = "programas"
+
+[[bgi.ejecutables]]
+sha256 = "3c9ef4e0296e019daad247ae9689eec53676626d74864fac56d2133ebc5d508f"
+version = "1.642.1 (DESIRE remaster, x86)"
+# El exe elige «ＭＳ ゴシック» (16 bytes de lugar) o «MS Gothic» (12) según el idioma del sistema (0x46fa9d y 0x46fc9a).
+# La fuente nueva se escribe en el lugar de 16 bytes y los dos «mov …, 0x4ee2f0» pasan a apuntar ahí.
+font = [
+    { offset = 0xed2e0, original = "826c827220835383568362834e00", tamano = 16 },
+]
+parches = [
+    { offset = 0x6eea5, original = "f0e24e00", nuevo = "e0e24e00", para = "fuente" },   # mov eax, «MS Gothic» -> el lugar nuevo
+    { offset = 0x6f0a4, original = "f0e24e00", nuevo = "e0e24e00", para = "fuente" },   # mov ecx, «MS Gothic» -> el lugar nuevo
+]

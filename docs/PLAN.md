@@ -328,6 +328,11 @@ Notas que dejó la fase 1:
   - [x] `motores/contrato.py`; lo pasan BGI (modos UTF-8 y katakana, `releer` sobre los escenarios sueltos), un motor de texto plano
         de juguete y una herramienta externa simulada; BGI ya no exige un exe si el perfil no declara uno
 - [ ] Fase 4 — Kirikiri y tercer motor, interfaz `Motor` v1
+- [x] Juego nuevo: **DESIRE remaster** (BGI 1.642.1, exe de 32 bits) con su perfil: parche de fuente en el exe (lugares de tamaño
+      variable + cambios de bytes verificados), modo katakana por perfil (sin UTF-8 en esa versión) y modo proporcional en los
+      programas de sistema (`motores/bgi/sysprg.py`, el método del parche de Sakura no Uta); prueba de contrato en el juego real sin problemas
+- [ ] Nombres de personaje: hoy cada mensaje con nombre da dos filas; un glosario de nombres (traducir cada nombre una vez) ahorraría
+      miles de filas repetidas (en DESIRE, unas 22 000)
 - [ ] **Fase 5** — API local e interfaz gráfica *(primera versión funcionando)*
   - [x] API local (`nucleo/api.py`, solo biblioteca estándar): 127.0.0.1 + token por sesión; filas con fusión a tres bandas,
         tareas largas con registro, revisión, galería (ver/subir/estado), preferencias; `tl-organizer servir` / `tl-organizer gui`

@@ -7,6 +7,14 @@ exe_patch.py (parche del exe).  Opciones del perfil, sección [bgi]:
     fuente = "NOMBRE"                fuente que usa el juego parcheado (si falta, no se cambia la fuente)
     [[bgi.ejecutables]]              versiones conocidas del exe con las direcciones del parche (ver exe_patch.py)
 
+    modo = "utf8" | "katakana"       cómo se guarda el texto: UTF-8 (motor 1.653 o posterior, con Text_SetEncoding) o
+                                     Shift-JIS con los acentos como katakana de ancho medio (necesita una fuente que los
+                                     dibuje como letras, como SubaHibi07Inq).  Por defecto, utf8.
+    proporcional = "exe" | "programas" | "no"
+                                     texto proporcional con un desvío en el exe ([[bgi.ejecutables]] con «hook») o
+                                     parcheando los programas de sistema (sysprg.py; versiones viejas).  Por defecto, exe.
+    programas = ["sysprg.arc"]       dónde están los programas de sistema
+
 Valores por defecto si el perfil no los indica: [texto] archivos = ["data0*.arc"], [imagenes] archivos = ["sysgrp.arc"].
 """
 import os
@@ -34,6 +42,10 @@ class MotorBGI(Motor):
                 self.builds[b["sha256"]] = b
         except exe_patch.PatchError as e:
             raise MotorError(f"{self.perfil.ruta or self.perfil.id}: {e}")
+        if self.opciones.get("modo", "utf8") not in ("utf8", "katakana"):
+            raise MotorError(f"{self.perfil.ruta or self.perfil.id}: [bgi] modo tiene que ser «utf8» o «katakana»")
+        if self.opciones.get("proporcional", "exe") not in ("exe", "programas", "no"):
+            raise MotorError(f"{self.perfil.ruta or self.perfil.id}: [bgi] proporcional tiene que ser «exe», «programas» o «no»")
         fuente = self.opciones.get("fuente")
         if fuente is not None:
             try:
@@ -44,6 +56,15 @@ class MotorBGI(Motor):
     @property
     def fuente(self):
         return self.opciones.get("fuente")
+
+    @property
+    def utf8(self):
+        """Modo por defecto del perfil (las opciones de build pueden cambiarlo)."""
+        return self.opciones.get("modo", "utf8") == "utf8"
+
+    def _utf8(self, opciones):
+        v = (opciones or {}).get("utf8")
+        return self.utf8 if v is None else v
 
     @property
     def data_arcs(self):
@@ -82,9 +103,11 @@ class MotorBGI(Motor):
         from . import build
         op = opciones or {}
         return build.build(juego, salida, parche_viejo, filas, imagenes, estados, voces=op.get("voces", True),
-                           utf8=op.get("utf8", True), font_name=op.get("fuente") or self.fuente, exe=ejecutable,
+                           utf8=self._utf8(op), font_name=op.get("fuente") or self.fuente, exe=ejecutable,
                            exe_name=self.perfil.ejecutable, builds=self.builds,
-                           data_arcs=self.data_arcs, ui_arcs=self.ui_arcs, log=log)
+                           data_arcs=self.data_arcs, ui_arcs=self.ui_arcs,
+                           proporcional=self.opciones.get("proporcional", "exe"),
+                           sys_arcs=tuple(self.opciones.get("programas", ["sysprg.arc"])), log=log)
 
     def releer(self, juego, salida):
         """Los textos que mostraría el juego con salida/Script/CVTD encima (los escenarios sueltos tapan los del .arc)."""
@@ -114,7 +137,7 @@ class MotorBGI(Motor):
     def caracteres_invalidos(self, texto, opciones=None):
         """En modo UTF-8 (el de siempre) solo el carácter nulo; en modo katakana, todo lo que no entra en Shift-JIS."""
         malos = ["\0"] if "\0" in texto else []
-        if not (opciones or {}).get("utf8", True):
+        if not self._utf8(opciones):
             from .text import accents
             malos += accents.unencodable(texto)
         return malos
@@ -123,13 +146,15 @@ class MotorBGI(Motor):
     @classmethod
     def argumentos_build(cls, p):
         p.add_argument("--sin-voz", action="store_true", help="no incluir Voice/CVTD del parche viejo")
-        p.add_argument("--katakana", action="store_true", help="modo antiguo: sin UTF-8, acentos como katakana de ancho medio")
+        p.add_argument("--katakana", dest="utf8", action="store_const", const=False,
+                       help="sin UTF-8: acentos como katakana de ancho medio (por defecto, el modo del perfil)")
+        p.add_argument("--utf8", dest="utf8", action="store_const", const=True, help="forzar el modo UTF-8")
         p.add_argument("--fuente", metavar="NOMBRE", help="nombre de la fuente del juego (ASCII, hasta 15 caracteres; debe estar "
                        "instalada); por defecto, la del perfil del juego")
 
     @classmethod
     def opciones_build(cls, a):
-        return dict(voces=not a.sin_voz, utf8=not a.katakana, fuente=a.fuente)
+        return dict(voces=not a.sin_voz, utf8=a.utf8, fuente=a.fuente)
 
     @classmethod
     def registrar_comandos(cls, sub, grupos):

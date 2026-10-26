@@ -319,11 +319,13 @@ def test_init_rechaza_lo_que_no_es_el_juego(tmp_path):
     vacia.mkdir()
     with pytest.raises(project.ProjectError) as e:
         project.init(str(vacia))
-    assert "falta BGI.exe" in str(e.value)
-    (vacia / "BGI.exe").write_bytes(b"cualquier cosa")
+    assert "falta" in str(e.value)
+    # con todos los archivos de la 15th pero un exe desconocido, el más parecido es ese perfil y dice qué pasa con el exe
+    for f in REQUERIDOS:
+        (vacia / f).write_bytes(b"cualquier cosa")
     with pytest.raises(project.ProjectError) as e:
         project.init(str(vacia))
-    assert "no es una versión conocida" in str(e.value)
+    assert "Subarashiki Hibi" in str(e.value) and "BGI.exe no es una versión conocida" in str(e.value)
 
 
 def test_reset_no_toca_el_juego(tmp_path, monkeypatch):
@@ -476,7 +478,7 @@ def test_perfil_incluido_conserva_los_datos_del_exe():
     perfil = perfiles.obtener("subahibi-15th")
     m = motores.crear(perfil)
     b = m.builds["993e9803a4335ff752dd7b4fd7b5036c3200c88c74fbde05d29b5123be5bd29c"]
-    assert b["font"] == [(0x17C740, b"MS Gothic\x00"), (0x17C750, b"\x82l\x82r \x83S\x83V\x83b\x83N\x00")]
+    assert b["font"] == [(0x17C740, b"MS Gothic\x00", 16), (0x17C750, b"\x82l\x82r \x83S\x83V\x83b\x83N\x00", 16)]
     assert (b["hook"], b["hook_bytes"], b["cave"], b["back"]) == (0x1400DF7FA, "89742428458bc4", 0x1400DF76C, 0x1400DF801)
     assert (b["entry_field"], b["entry_rva"], b["image_base"], b["utf8_cave"], b["set_encoding"]) == \
         (0x150, 0x11D74, 0x140000000, 0x140001DF0, 0x1400F74C0)
@@ -1047,3 +1049,56 @@ def test_api_local(tmp_path, monkeypatch):
         assert pedir("GET", "no/existe")[0] == 404
     finally:
         cerrar()
+
+
+# ---------------------------------------------------------------- BGI viejo (DESIRE 1.642.1): proporcional y exe genérico
+
+def _programa(codigo):
+    """Un programa de sistema (._bp) sintético: cabecera de 16 bytes y el código."""
+    return struct.pack("<II", 16, len(codigo)) + b"\0" * 8 + codigo
+
+
+def test_proporcional_en_programas_de_sistema():
+    from tl_organizer.motores.bgi import sysprg
+    pref = bytes.fromhex("0210000000" "0006" "20")                 # dirección de la preferencia: 0x10 + 6
+    dibujar = _programa(bytes.fromhex("0007" "0000" "0009" "9188")          # 91:88 con el 2.º argumento = push 0
+                        + pref + b"\x08\x00" + bytes.fromhex("0000" "9188"))  # 91:88 que lee la preferencia
+    formato = _programa(b"".join(bytes([0, v]) for v in [0, 5, 5, 5, 5, 5, 5, 5, 5]) + b"\x92\x9c"           # 9.º (el 1.º empujado) = push 0
+                        + bytes.fromhex("0001" "0c") + bytes([0, 1]) * 8 + b"\x92\x9c")              # algo raro: no se toca
+    datos = _programa(pref + bytes.fromhex("0000" "0900"))           # inicializa la preferencia con 0
+    nuevos, rep = sysprg.parchear_proporcional({"a._bp": dibujar, "b._bp": formato, "userdata._bp": datos, "c._bp": _programa(b"\x00\x05")})
+    assert sorted(nuevos) == ["a._bp", "b._bp", "userdata._bp"] and len(rep["cambios"]) == 3
+    assert nuevos["a._bp"][16 + 3] == 1 and nuevos["a._bp"][16 + 5] == 9 and nuevos["userdata._bp"][16 + 9] == 1
+    assert nuevos["b._bp"][16 + 1] == 1 and nuevos["b._bp"][16 + 3] == 5
+    assert len(rep["omitidas"]) == 1 and rep["omitidas"][0][0] == "b._bp"
+    assert sysprg.parchear_proporcional({**{"a._bp": dibujar, "b._bp": formato, "userdata._bp": datos}, **nuevos})[1]["cambios"] == []
+
+
+def test_exe_parches_genericos_y_capacidades():
+    from tl_organizer.motores.bgi import exe_patch
+    exe = bytearray(b"\xcc" * 64)
+    exe[0:14] = "ＭＳ ゴシック".encode("cp932") + b"\0"
+    exe[32:36] = bytes.fromhex("f0e24e00")
+    b = exe_patch.desde_perfil({"sha256": exe_patch.sha256(bytes(exe)), "version": "prueba x86",
+                                "font": [{"offset": 0, "original": exe[0:14].hex(), "tamano": 16}],
+                                "parches": [{"offset": 32, "original": "f0e24e00", "nuevo": "e0e24e00"}]})
+    builds = {b["sha256"]: b}
+    assert not exe_patch.tiene_proporcional(b) and not exe_patch.tiene_utf8(b)
+    nuevo = exe_patch.patch(bytes(exe), builds, proportional=False, font_name="SubaHibi07Inq")
+    assert nuevo[0:16] == b"SubaHibi07Inq\0\0\0" and nuevo[32:36] == bytes.fromhex("e0e24e00") and nuevo[36:] == exe[36:]
+    with pytest.raises(exe_patch.PatchError, match="no tiene modo UTF-8"):
+        exe_patch.patch(bytes(exe), builds, proportional=False, utf8=True, font_name="X")
+    with pytest.raises(exe_patch.PatchError, match="programas"):
+        exe_patch.patch(bytes(exe), builds, proportional=True, font_name="X")
+    with pytest.raises(exe_patch.PatchError, match="1 a 15"):
+        exe_patch.patch(bytes(exe), builds, proportional=False, font_name="NombreMuyLargoDeFuente")
+
+
+def test_perfil_desire():
+    from tl_organizer import motores
+    from tl_organizer.nucleo import perfiles
+    m = motores.crear(perfiles.obtener("desire-remaster"))
+    b = m.builds["3c9ef4e0296e019daad247ae9689eec53676626d74864fac56d2133ebc5d508f"]
+    assert m.utf8 is False and m.opciones["proporcional"] == "programas" and m.data_arcs == ("data010*.arc",)
+    assert not m.caracteres_invalidos("¡Ñandú!") and m.caracteres_invalidos("5 €") == ["€"]      # katakana: el € no entra
+    assert m._utf8({"utf8": True}) is True and b["parches"][0][0] == 0x6eea5

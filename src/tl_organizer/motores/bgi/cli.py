@@ -54,8 +54,9 @@ def cmd_patch_exe(a):
         return 0 if b else 1
     fuente = a.fuente or getattr(m, "fuentes_por_exe", {}).get(h) or m.fuente
     try:
-        out = exe_patch.patch(data, m.builds, font=not a.sin_fuente, proportional=not a.sin_proporcional,
-                              utf8=not a.katakana, font_name=fuente)
+        out = exe_patch.patch(data, m.builds, font=not a.sin_fuente,
+                              proportional=not a.sin_proporcional and bool(b) and exe_patch.tiene_proporcional(b),
+                              utf8=not a.katakana and bool(b) and exe_patch.tiene_utf8(b), font_name=fuente)
     except exe_patch.PatchError as e:
         sys.exit(f"error: {e}")
     if a.dry_run:
@@ -120,8 +121,9 @@ def cmd_text_import(a):
         proj = project.require()
         flujo.sincronizar(proj)
         filas = proj.almacen.filas_por_escenario()
+    m = _motor()
     r = import_.apply_rows(need(a.juego, "juego", "la carpeta del juego"), filas, need(a.salida, "juego_es", "la carpeta de salida"),
-                           lista(a.estados), not a.katakana, _motor().data_arcs)
+                           lista(a.estados), m.utf8 and not a.katakana, m.data_arcs)
     for k, v in r["errores"][:30]:
         print("ERROR:", k, "-", v)
     if len(r["errores"]) > 30:
